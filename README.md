@@ -1,10 +1,10 @@
 # buyTokenOnDex - Buy token quickly
 
-Buying and selling tokens on EVM (Ethereum Virtual Machine) compatible blockchain can be really slow for end users. Connecting to metamask, to the DEX, going to swap page, selecting contract you want to buy, setting slippage etc. All theses tasks takes time and you can waste easily 30-60 seconds setting all your swap parameters. 
+Buying and selling tokens on EVM (Ethereum Virtual Machine) compatible blockchain can be slow for end users. Connecting to metamask, to the DEX, going to swap page, selecting contract you want to buy, setting slippage etc. All theses tasks takes time and you can waste easily 30-60 seconds setting all your swap parameters, which is an eternity during a token launch. 
 
 ## What is this tool ? 
 
-This tool allows users to set parameters before sending a transaction to a DEX. It allows users to save a lot of time especially during token launches.
+This tool allows users to set parameters before sending a transaction to a DEX. 
 
 ## How does it work ? 
 1) Select the DEX you want to connect to - it will connect directly to the blockchain you want to interact with
