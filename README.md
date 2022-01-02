@@ -4,7 +4,7 @@ Buying and selling tokens on EVM (Ethereum Virtual Machine) compatible blockchai
 
 ## What is this tool ? 
 
-This tool allows users to set parameters before sending a transaction to a DEX. 
+This tool allows users to set parameters before sending a BUY transaction to a DEX. 
 
 ## How does it work ? 
 1) Select the DEX you want to connect to - it will connect directly to the blockchain you want to interact with
@@ -18,7 +18,8 @@ This tool allows users to set parameters before sending a transaction to a DEX.
 
 1) Create a python virtual environment 
 2) Clone this github repository on your environment : git clone https://github.com/soksay/buyTokenOnDex.git
-3) Change working directory : cd buyTokenOnDex
-4) Install requirements : pip install -r requirements.txt
-5) Change the variables "private" and "sender_address" in the file config.py with the wallet you want to use (you can use a different wallet than yours if you have trust issues :) )
+3) They will ask you a passphrase, i'll give it to you in private
+4) Change working directory : cd buyTokenOnDex
+5) Install requirements : pip install -r requirements.txt
+6) Change the variables "private" and "sender_address" in the file config.py with the wallet you want to use (you can use a different wallet than yours if you have trust issues :) )
 
