@@ -17,7 +17,7 @@ This tool allows users to set parameters before sending a BUY transaction to a D
 ## How to set up your python environment ? 
 
 1) Create a python virtual environment 
-2) Clone this github repository on your environment : git clone https://github.com/soksay/buyTokenOnDex.git
+2) Clone this github repository on your environment : git clone git@github.com:soksay/buyTokenOnDex.git
 3) The terminal will ask you a passphrase, i'll give it to you in private message
 4) Change working directory : cd buyTokenOnDex
 5) Install requirements : pip install -r requirements.txt
