@@ -12,4 +12,13 @@ This tool allows users to set parameters before sending a transaction to a DEX.
 3) Select the number of native tokens you want to swap (e.g amount of BNB you want to swap if you decided to connect to pancakeswap)
 4) Select the slippage you want to set (allows user to set a slippage between 0.1 and 49) 
 5) Paste the address of the token you want to buy
+6) Enjoy buying token fast
+
+## How to set up your python environment ? 
+
+1) Create a python virtual environment 
+2) Clone this github repository on your environment : git clone https://github.com/soksay/buyTokenOnDex.git
+3) Change working directory : cd buyTokenOnDex
+4) Install requirements : pip install -r requirements.txt
+5) Change the variables "private" and "sender_address" in the file config.py with the wallet you want to use (you can use a different wallet than yours if you have trust issues :) )
 
