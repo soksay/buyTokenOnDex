@@ -21,5 +21,6 @@ This tool allows users to set parameters before sending a BUY transaction to a D
 3) The terminal will ask you a passphrase, i'll give it to you in private message
 4) Change working directory : cd buyTokenOnDex
 5) Install requirements : pip install -r requirements.txt
-6) Change the variables "private" and "sender_address" in the file config.py with the wallet you want to use (you can use a different wallet than yours if you have trust issues :) )
+6) Change the variables "private" and "sender_address" in the file config.py with the wallet you want to use (you can use a different wallet if you feel like it )
+7) Type this to run the script : python buyTokenOnDex.py
 
