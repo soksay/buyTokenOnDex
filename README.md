@@ -10,7 +10,7 @@ This tool allows users to set parameters before sending a BUY transaction to a D
 1) Select the DEX you want to connect to - it will connect directly to the blockchain you want to interact with
 2) Select the multiplier of gas price you want to set (1 if it is a normal transaction, 2 multiply gas price by 2 etc. 
 3) Select the number of native tokens you want to swap (e.g amount of BNB you want to swap if you decided to connect to pancakeswap)
-4) Select the slippage you want to set (allows user to set a slippage between 0.1 and 49) 
+4) Select the slippage you want to set (allows user to set a slippage between 0.1 and 99.9) 
 5) Paste the address of the token you want to buy
 6) Enjoy buying token fast
 
