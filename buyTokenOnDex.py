@@ -21,20 +21,37 @@ def choice_dex():
             validation = False
     if validation == True:
         global contract
+        global contract_factory
+
         global web3
         global nativeTokenAddress
         global nameNativeContract
         global symbolNativeContract
         global humanReadableBalance
+        global decimalsNativeContract
+
+        global stablecoinTokenAddress
+        global nameStablecoinContract
+        global symbolStablecoinContract
+        global decimalsStablecoinContract
         global DexChosen
+
 
         DexChosen = df.loc[df['Dex'] == choiceDex]
 
         web3 = Web3(Web3.HTTPProvider(DexChosen["Rpc"].values[0]))
+
+        stablecoinTokenAddress = web3.toChecksumAddress(DexChosen["StablecoinTokenAddress"].values[0])
+        nameStablecoinContract = DexChosen["StablecoinName"].values[0]
+        symbolStablecoinContract = DexChosen["StablecoinSymbol"].values[0]
+        decimalsStablecoinContract = DexChosen["StablecoinDecimals"].values[0]
+
         nativeTokenAddress = web3.toChecksumAddress(DexChosen["NativeTokenAddress"].values[0])
         contract = web3.eth.contract(nativeTokenAddress, abi=DexChosen["NativeTokenAbi"].values[0])
         nameNativeContract = contract.functions.name().call()
         symbolNativeContract = contract.functions.symbol().call()
+        decimalsNativeContract = contract.functions.decimals().call()
+
         balance = web3.eth.get_balance(config.sender_address)
         humanReadableBalance = web3.fromWei(balance, 'ether')
 
@@ -46,7 +63,29 @@ def choice_dex():
             address=web3.toChecksumAddress(DexChosen["RouterAddress"].values[0]),
             abi=DexChosen["RouterAddressAbi"].values[0])
 
+        contract_factory = web3.eth.contract(
+            address=web3.toChecksumAddress(DexChosen["FactoryAddress"].values[0]),
+            abi=DexChosen["FactoryAddressAbi"].values[0])
+
+
+        if DexChosen["Dex"].values[0] == "solarbeam": # SolarBeam getAmountsOut function requires a 3rd argument for fes which we set to 0.
+            native_token_price = contract.functions.getAmountsOut(
+                web3.toWei(1, "ether"),
+                [nativeTokenAddress, stablecoinTokenAddress],  # [SELL, BUY]
+                0
+            ).call()
+        else:
+            native_token_price = contract.functions.getAmountsOut(
+                web3.toWei(1, "ether"),
+                [nativeTokenAddress, stablecoinTokenAddress] # [SELL, BUY]
+            ).call()
+
+        native_token_price_readable = float(native_token_price[1]) / (10 ** float(decimalsStablecoinContract))
+
+        print("The price for 1", symbolNativeContract, "is", native_token_price_readable, symbolStablecoinContract )
+
         print("You have chosen DEX : ", DexChosen["Dex"].values[0])
+
     else:
         print("Incorrect value. Please select a DEX in the following list ", liste_dex )
         print("")
@@ -72,7 +111,7 @@ def param_tx():
 
     def setAmountTokenToSpend():
         global amountTokenToSpend
-        print("You have ", humanReadableBalance, " ", symbolNativeContract, " in your wallet")
+        print("You have ", "{:.2f}".format(humanReadableBalance) , " ", symbolNativeContract, " in your wallet")
         print("How many ", nameNativeContract, "(", symbolNativeContract, ") do you want to spend ?")
         amountTokenToSpend = input("Select the amount here : ")
         if float(amountTokenToSpend) >= float(humanReadableBalance):
@@ -108,12 +147,19 @@ def param_tx():
     setTokenToBuy()
 
     # Cake = 0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82 - BsC
+
     # Solar = 0x6bD193Ee6D2104F14F94E2cA6efefae561A4334B - Moonriver
+    # Moonbeans = 0xc2392dd3e3fed2c8ed9f7f0bdf6026fcd1348453 - Moonriver
+
     # Joe = 0x6e84a6216eA6dACC71eE8E6b0a5B7322EEbC0fDd - Avalanche
+
     # Spirit = 0x5Cc61A78F164885776AA610fb0FE1257df78E59B - Fantom
     # Boo = 0x841fad6eae12c286d1fd18d1d525dffa75c7effe - Fantom
+
     # Quick = 0x831753DD7087CaC61aB5644b308642cc1c33Dc13 - Polygon
+
     # Trisolaris = 0xFa94348467f64D5A457F75F8bc40495D33c65aBB - Aurora
+
     # VVS = 0x2D03bECE6747ADC00E1a131BBA1469C15fD11e03 - Cronos
 
 def send_tx():
@@ -126,10 +172,17 @@ def send_tx():
 
     def setBuyAmount():
         global buy_amount
+        global buy_amount_stablecoin
         if DexChosen["Dex"].values[0] == "solarbeam":
             buy_amount = contract.functions.getAmountsOut(
                 web3.toWei(amountTokenToSpend, "ether"),
                 [nativeTokenAddress, tokenToBuy],  # [SELL, BUY]
+                0 ## solarbearm uses a 3rd argument for "fees" in their getAmountsOut function
+            ).call()
+
+            buy_amount_stablecoin = contract.functions.getAmountsOut(
+                web3.toWei(amountTokenToSpend, "ether"),
+                [nativeTokenAddress, stablecoinTokenAddress], # [SELL, BUY]
                 0
             ).call()
         else:
@@ -138,12 +191,26 @@ def send_tx():
                 [nativeTokenAddress, tokenToBuy]  # [SELL, BUY]
             ).call()
 
+            buy_amount_stablecoin = contract.functions.getAmountsOut(
+                web3.toWei(amountTokenToSpend, "ether"),
+                [nativeTokenAddress, stablecoinTokenAddress] # [SELL, BUY]
+            ).call()
+
     setBuyAmount()
     humanReadable_buyamount = float(web3.fromWei(buy_amount[1], "ether"))
+    humanReadable_buyamount_stablecoin = float(buy_amount_stablecoin[1]) / ( 10 ** float(decimalsStablecoinContract) )
+    humanReadable_entryPrice = float(humanReadable_buyamount_stablecoin) / float(humanReadable_buyamount)
+
     global minimumTokenReceived
     minimumTokenReceived = humanReadable_buyamount * (1 - slippage_percent)
-    print("You will receive ", humanReadable_buyamount, " tokens (", minimumTokenReceived, " at the minimum) for",
-          amountTokenToSpend, " ", nameNativeContract, "(", symbolNativeContract, ") spent")
+    print("You will receive ", "{:.2f}".format(humanReadable_buyamount), " tokens (", "{:.2f}".format(minimumTokenReceived), " at the minimum) for",
+          amountTokenToSpend, nameNativeContract, "(", symbolNativeContract, ") spent")
+    print("Price in stable coin is : ", "{:.2f}".format(humanReadable_buyamount_stablecoin), symbolStablecoinContract)
+    print("Entry price is : ", "{:.2f}".format(humanReadable_entryPrice), symbolStablecoinContract, "per tokens")
+
+    pair = contract_factory.functions.getPair(tokenToBuy, nativeTokenAddress).call()
+    link = "https://dexscreener.com/" + DexChosen["Blockchain"].values[0] + "/" + pair
+    print("Chart link : ", link)
 
     if DexChosen["Dex"].values[0] == "traderjoe":
         tx = contract.functions.swapExactAVAXForTokens(
@@ -156,7 +223,7 @@ def send_tx():
             'from': config.sender_address,
             'value': web3.toWei(amountTokenToSpend, 'ether'),
             # This is the token BNB amount you want to swap from
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(finalGasPrice, 'gwei'),
             'nonce': nonce,
         })
@@ -171,14 +238,15 @@ def send_tx():
         ).buildTransaction({
             'from': config.sender_address,
             'value': web3.toWei(amountTokenToSpend, 'ether'),
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(finalGasPrice, 'gwei'),
             'nonce': nonce,
         })
 
     signed_txn = web3.eth.account.sign_transaction(tx, private_key=config.private)
     tx_token = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
-    print("Transaction ID : ",web3.toHex(tx_token))
+    tx_link = DexChosen["Explorer"].values[0] + "tx/" + web3.toHex(tx_token)
+    print("Transaction link : ", tx_link)
     beginning_tx = time.time()
     tx_receipt = web3.eth.wait_for_transaction_receipt(tx_token)
     ending_tx = time.time()
