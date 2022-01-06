@@ -4,8 +4,104 @@ import config
 import time
 import datetime
 
-def choice_dex():
+"""
+Utility functions 
+"""
 
+
+def waitForTxResponse(tx):
+    signed_txn = web3.eth.account.sign_transaction(tx, private_key=config.private)
+    tx_token = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+    tx_link = dex_chosen["Explorer"].values[0] + "tx/" + web3.toHex(tx_token)
+    print("Transaction link : ", tx_link)
+    beginning_tx = time.time()
+    tx_receipt = web3.eth.wait_for_transaction_receipt(tx_token)
+    ending_tx = time.time()
+    time_tx = ending_tx - beginning_tx
+    print("Time to execute the transaction : ", time_tx, "seconds.")
+
+    if tx_receipt.status == 1:
+        tx_status = "sent"
+    else:
+        tx_status = "not sent"
+
+    print("Status of the transaction : ", tx_status)
+
+
+def getAmountOut(dex, amount_token_spend,decimals, token_to_spend, token_to_buy):
+
+    if decimals == 18:
+        amount_token_spend_wei = web3.toWei(amount_token_spend, "ether")
+    elif decimals == 9:
+        amount_token_spend_wei = web3.toWei(amount_token_spend, "gwei")
+    elif decimals == 6:
+        amount_token_spend_wei = web3.toWei(amount_token_spend, "mwei")
+
+    if dex == "solarbeam":
+        amount_out = contract_router.functions.getAmountsOut(
+        amount_token_spend_wei,
+        [token_to_spend, token_to_buy],  # [SELL, BUY]
+        0
+        ).call()
+
+    else:
+        amount_out = contract_router.functions.getAmountsOut(
+            amount_token_spend_wei,
+            [token_to_spend, token_to_buy] # [SELL, BUY]
+        ).call()
+
+    return amount_out
+
+def returnEtherValue(input_value , decimals):
+    if decimals == 18:
+        amount_token_out_ether = web3.fromWei(input_value, "ether")
+    elif decimals == 9:
+        amount_token_out_ether = web3.fromWei(input_value, "gwei")
+    elif decimals == 6:
+        amount_token_out_ether = web3.fromWei(input_value, "mwei")
+    return amount_token_out_ether
+
+def getGasPrice(multiplier):
+    global gas_price_final_gwei
+    global gas_price_wei
+    global gas_price_gwei
+
+    gas_price_wei = web3.eth._gas_price()
+    gas_price_gwei = web3.fromWei(gas_price_wei, "gwei")
+    gas_price_final_gwei = float(gas_price_gwei) * float(multiplier)
+    print("Timestamp : ", datetime.datetime.now(), " - Gas price of your transactions will be ", gas_price_final_gwei, "gwei.")
+
+def getNativeTokenPrice():
+    global native_token_price
+    global native_token_price_readable
+    native_token_price = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=1,
+                                      decimals=native_token_decimals,
+                                      token_to_spend=native_token_address, token_to_buy=stable_coin_token_address)
+
+    native_token_price_readable = float(native_token_price[1]) / (10 ** float(stable_coin_decimals))
+    print("Timestamp : ", datetime.datetime.now(),"- the price for 1", native_token_symbol, "is",
+          native_token_price_readable, stable_coin_symbol)
+
+def chooseToken(method):
+    token_chosen = input("Enter the address of the token you want to " + method + " : ")
+    if Web3.isAddress(token_chosen):
+        token_chosen_address = Web3.toChecksumAddress(token_chosen)
+    else:
+        print("The token address that you typed is not a token address. Retry.")
+        print("")
+        chooseToken()
+    return token_chosen_address
+
+"""
+End utility functions 
+"""
+
+"""
+Execution functions
+"""
+
+#1) choose the dex and initiate parameters
+def choice_dex():
     df = pd.read_excel("dex_parameters.xlsx")
     liste_dex = df["Dex"].values
 
@@ -20,248 +116,279 @@ def choice_dex():
         else:
             validation = False
     if validation == True:
-        global contract
+        global contract_router
         global contract_factory
 
         global web3
-        global nativeTokenAddress
-        global nameNativeContract
-        global symbolNativeContract
-        global humanReadableBalance
-        global decimalsNativeContract
+        global native_token_address
+        global native_token_name
+        global native_token_symbol
+        global native_token_balance_readable
+        global native_token_balance
+        global native_token_decimals
 
-        global stablecoinTokenAddress
-        global nameStablecoinContract
-        global symbolStablecoinContract
-        global decimalsStablecoinContract
-        global DexChosen
+        global stable_coin_token_address
+        global stable_coin_name
+        global stable_coin_symbol
+        global stable_coin_decimals
+        global dex_chosen
 
 
-        DexChosen = df.loc[df['Dex'] == choiceDex]
+        dex_chosen = df.loc[df['Dex'] == choiceDex]
 
-        web3 = Web3(Web3.HTTPProvider(DexChosen["Rpc"].values[0]))
+        web3 = Web3(Web3.HTTPProvider(dex_chosen["Rpc"].values[0]))
 
-        stablecoinTokenAddress = web3.toChecksumAddress(DexChosen["StablecoinTokenAddress"].values[0])
-        nameStablecoinContract = DexChosen["StablecoinName"].values[0]
-        symbolStablecoinContract = DexChosen["StablecoinSymbol"].values[0]
-        decimalsStablecoinContract = DexChosen["StablecoinDecimals"].values[0]
+        stable_coin_token_address = web3.toChecksumAddress(dex_chosen["StablecoinTokenAddress"].values[0])
+        stable_coin_name = dex_chosen["StablecoinName"].values[0]
+        stable_coin_symbol = dex_chosen["StablecoinSymbol"].values[0]
+        stable_coin_decimals = dex_chosen["StablecoinDecimals"].values[0]
 
-        nativeTokenAddress = web3.toChecksumAddress(DexChosen["NativeTokenAddress"].values[0])
-        contract = web3.eth.contract(nativeTokenAddress, abi=DexChosen["NativeTokenAbi"].values[0])
-        nameNativeContract = contract.functions.name().call()
-        symbolNativeContract = contract.functions.symbol().call()
-        decimalsNativeContract = contract.functions.decimals().call()
+        native_token_address = web3.toChecksumAddress(dex_chosen["NativeTokenAddress"].values[0])
+        contract = web3.eth.contract(native_token_address, abi=dex_chosen["NativeTokenAbi"].values[0])
+        native_token_name = contract.functions.name().call()
+        native_token_symbol = contract.functions.symbol().call()
+        native_token_decimals = contract.functions.decimals().call()
 
-        balance = web3.eth.get_balance(config.sender_address)
-        humanReadableBalance = web3.fromWei(balance, 'ether')
+        native_token_balance = web3.eth.get_balance(config.sender_address)
+        native_token_balance_readable = web3.fromWei(native_token_balance, 'ether')
 
-        print("Verifying connection ", DexChosen["Blockchain"].values[0], " : ", web3.isConnected())
-        print("Native token of the blockchain is ", nameNativeContract, "(", symbolNativeContract,
-              "), address is : ", nativeTokenAddress)
+        print("Verifying connection ", dex_chosen["Blockchain"].values[0], " : ", web3.isConnected())
+        print("Native token of the blockchain is ", native_token_name, "(", native_token_symbol,
+              "), address is : ", native_token_address)
 
-        contract = web3.eth.contract(
-            address=web3.toChecksumAddress(DexChosen["RouterAddress"].values[0]),
-            abi=DexChosen["RouterAddressAbi"].values[0])
+        contract_router = web3.eth.contract(
+            address=web3.toChecksumAddress(dex_chosen["RouterAddress"].values[0]),
+            abi=dex_chosen["RouterAddressAbi"].values[0])
 
         contract_factory = web3.eth.contract(
-            address=web3.toChecksumAddress(DexChosen["FactoryAddress"].values[0]),
-            abi=DexChosen["FactoryAddressAbi"].values[0])
+            address=web3.toChecksumAddress(dex_chosen["FactoryAddress"].values[0]),
+            abi=dex_chosen["FactoryAddressAbi"].values[0])
 
+        getNativeTokenPrice()
 
-        if DexChosen["Dex"].values[0] == "solarbeam": # SolarBeam getAmountsOut function requires a 3rd argument for fes which we set to 0.
-            native_token_price = contract.functions.getAmountsOut(
-                web3.toWei(1, "ether"),
-                [nativeTokenAddress, stablecoinTokenAddress],  # [SELL, BUY]
-                0
-            ).call()
-        else:
-            native_token_price = contract.functions.getAmountsOut(
-                web3.toWei(1, "ether"),
-                [nativeTokenAddress, stablecoinTokenAddress] # [SELL, BUY]
-            ).call()
-
-        native_token_price_readable = float(native_token_price[1]) / (10 ** float(decimalsStablecoinContract))
-
-        print("The price for 1", symbolNativeContract, "is", native_token_price_readable, symbolStablecoinContract )
-
-        print("You have chosen DEX : ", DexChosen["Dex"].values[0])
+        print("You have chosen DEX : ", dex_chosen["Dex"].values[0])
 
     else:
         print("Incorrect value. Please select a DEX in the following list ", liste_dex )
         print("")
         choice_dex()
 
+#2) Set gas price multiplier
+def gasPriceChoice():
+    global gas_price_multiplier
+    print("Current gas price is :",  web3.fromWei(web3.eth._gas_price(),"gwei") ,"gwei on the blockchain",
+        dex_chosen["Blockchain"].values[0])
 
-def param_tx():
+    gas_price_multiplier = input(("Please select a multiplier on the current gas price : "))
+    getGasPrice(gas_price_multiplier)
 
-    def gasPriceChoice():
-        global choiceGasPrice
-        global finalGasPrice
-        global gasPrice
-        global gasPriceGwei
-        choiceGasPrice = None
-        print("Current gas price is :",  web3.fromWei(web3.eth._gas_price(),"gwei") ,"gwei on the blockchain",
-            DexChosen["Blockchain"].values[0])
+#3) Set slippage parameters (up to 99%)
+def setSlippage():
+    slippage = float(input("Select the slippage (between 0.1 and 99.9): "))
+    if 0.1 <= slippage <= 99.9:
+        global slippage_percent
+        slippage_percent = slippage / 100
+    else:
+        print("Slippage must be set between 0.1 and 99.9. Retry.")
+        print("")
+        setSlippage()
 
-        choiceGasPrice = input(("Please select a multiplier on the current gas price : "))
-        gasPrice = web3.eth._gas_price()
-        gasPriceGwei = web3.fromWei(gasPrice, "gwei")
-        finalGasPrice = float(gasPriceGwei) * float(choiceGasPrice)
-        print("Timestamp : ", datetime.datetime.now(), " - Gas price of your transaction will be ", finalGasPrice, "gwei.")
+#4) Set choice swap method
+def choice_swap_method():
+    global swap_method_chosen
+    print("Choose your swap method : ")
+    print(" - Type 1 if you want to swap exact number of " + native_token_symbol + " for token")
+    print(" - Type 2 if you want to swap exact number of token A for token B ")
+    #print(" - Type 3 if you want to swap " + symbolNativeContract + " for exact number of token")
+    #print(" - Type 4 if you want to swap token A for exact number of token B ")
 
-    def setAmountTokenToSpend():
-        global amountTokenToSpend
-        print("You have ", "{:.2f}".format(humanReadableBalance) , " ", symbolNativeContract, " in your wallet")
-        print("How many ", nameNativeContract, "(", symbolNativeContract, ") do you want to spend ?")
-        amountTokenToSpend = input("Select the amount here : ")
-        if float(amountTokenToSpend) >= float(humanReadableBalance):
-            print("The value selected must be inferior to : ", humanReadableBalance )
-            print("")
-            setAmountTokenToSpend()
+    swap_method_chosen = input("Type your choice here : ")
 
-    def setSlippage():
-        slippage = float(input("Select the slippage (between 0.1 and 99.9): "))
-        if 0.1 <= slippage <= 99.9:
-            global slippage_percent
-            slippage_percent = slippage / 100
+    if (swap_method_chosen == "1" or swap_method_chosen == "2"):
+        print("You have chosen method " + swap_method_chosen)
+    else:
+        print("You have to choose between the options proposed. Retry.")
+        choice_swap_method()
+
+
+#5) Set token to spend parameters depending on swap method chosen
+
+def setTokenToSpendParameters():
+    global amountTokenToSpend
+    global token_to_spend_balance
+    global token_to_spend_decimals
+    global token_to_spend_symbol
+    global token_to_spend_balance_readable
+    global token_to_spend_address
+
+    if swap_method_chosen == "1": # Here token to spend parameters are just native token parameters
+
+        token_to_spend_address = native_token_address
+        token_to_spend_balance = native_token_balance
+        token_to_spend_decimals = native_token_decimals
+        token_to_spend_symbol = native_token_symbol
+        token_to_spend_balance_readable = native_token_balance_readable
+
+    elif swap_method_chosen == "2": # Here token to spend parameters have to be requested
+
+        token_to_spend_address = chooseToken(method="spend")
+        token_to_spend_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
+        contract_token_to_spend = web3.eth.contract(token_to_spend_address, abi=token_to_spend_abi)
+        token_to_spend_balance = contract_token_to_spend.functions.balanceOf(config.sender_address).call()
+        token_to_spend_decimals = contract_token_to_spend.functions.decimals().call()
+        token_to_spend_symbol = contract_token_to_spend.functions.symbol().call()
+        token_to_spend_balance_readable = float(token_to_spend_balance) / (10 ** float(token_to_spend_decimals))
+
+        #check allowance of the token to spend
+        print("Checking " + token_to_spend_symbol + " allowance")
+        token_to_spend_allowance = contract_token_to_spend.functions.allowance(config.sender_address,
+                                               web3.toChecksumAddress(dex_chosen["RouterAddress"].values[0])).call()
+
+        if token_to_spend_allowance == 0:
+            # approve if no allowance
+            print("Now approving " + token_to_spend_symbol)
+            tx = contract_token_to_spend.functions.approve(config.sender_address, native_token_balance).buildTransaction({
+                'from': config.sender_address,
+                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
+                'nonce': web3.eth.get_transaction_count(config.sender_address)
+                })
+            waitForTxResponse(tx)
         else:
-            print("Slippage must be set between 0.1 and 99.9. Retry.")
-            print("")
-            setSlippage()
+            print(token_to_spend_symbol + " already approved : ")
 
-    def setTokenToBuy():
-        global tokenToBuy
-        print("/!\ the transaction will be sent directly after this step /!\ ")
-        tokenAddressChosen = input("Type the address of the token you want to buy : ")
-        if Web3.isAddress(tokenAddressChosen):
-            tokenToBuy = Web3.toChecksumAddress(tokenAddressChosen)
-        else:
-            print("The token address that you typed is not a token address. Retry.")
-            print("")
-            setTokenToBuy()
+# 6) choose token to spend amount
+def choice_amount_to_spend():
+    global amount_token_to_spend
+    print("You have ", "{:.5f}".format(token_to_spend_balance_readable) , " ", token_to_spend_symbol, " in your wallet")
+    print("How many", token_to_spend_symbol, "do you want to spend ?")
+    amount_token_to_spend = input("Select the amount here : ")
+    """
+    if float(amount_token_to_spend) >= float(token_to_spend_balance_readable):
+        print("The value selected must be inferior to : ", token_to_spend_balance_readable)
+        print("")
+        choice_amount_to_spend()
+    """
 
-    ### Call parameters functions
-    gasPriceChoice()
-    setAmountTokenToSpend()
-    setSlippage()
-    setTokenToBuy()
+# 7) set parameters for token to buy
+def setTokenToBuyParameters():
+    global token_to_buy_address
+    global token_to_buy_balance
+    global token_to_buy_decimals
+    global token_to_buy_symbol
+    global token_to_buy_balance_readable
 
-    # Cake = 0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82 - BsC
+    print("/!\ the transaction will be sent directly after this step /!\ ")
+    token_to_buy_address = chooseToken(method="buy")
+    token_to_buy_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
+    contract_token_to_buy = web3.eth.contract(token_to_buy_address, abi=token_to_buy_abi)
+    token_to_buy_balance = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+    token_to_buy_decimals = contract_token_to_buy.functions.decimals().call()
+    token_to_buy_symbol = contract_token_to_buy.functions.symbol().call()
+    token_to_buy_balance_readable = float(token_to_buy_balance) / (10 ** float(token_to_buy_decimals))
 
-    # Solar = 0x6bD193Ee6D2104F14F94E2cA6efefae561A4334B - Moonriver
-    # Moonbeans = 0xc2392dd3e3fed2c8ed9f7f0bdf6026fcd1348453 - Moonriver
+# 8) Set buy amount
+def setBuyAmount():
+    global minimum_token_received
 
-    # Joe = 0x6e84a6216eA6dACC71eE8E6b0a5B7322EEbC0fDd - Avalanche
+    getNativeTokenPrice()
 
-    # Spirit = 0x5Cc61A78F164885776AA610fb0FE1257df78E59B - Fantom
-    # Boo = 0x841fad6eae12c286d1fd18d1d525dffa75c7effe - Fantom
+    if token_to_spend_address != native_token_address:
+        #Amount of token that we want to spend in native blockchain token
+        buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=amount_token_to_spend,
+                                               decimals=token_to_spend_decimals,
+                                             token_to_spend=token_to_spend_address, token_to_buy=native_token_address)
+        # Amount in native blockchain token converted to token we want to spend
+        buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                  amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
+                                  decimals=native_token_decimals,
+                                  token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
 
-    # Quick = 0x831753DD7087CaC61aB5644b308642cc1c33Dc13 - Polygon
+        buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+        buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+        exchange_rate_spend_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable) ) / float(amount_token_to_spend)
+        exchange_rate_buy_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable)) / float(buy_amount_ether)
+        #entry_price = exchange_rate_buy_token :)
+        print("Exchange rate for 1", token_to_spend_symbol ,":", "{:.5f}".format(exchange_rate_spend_token) + " dollars")
+        print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+    else:
+        buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                  amount_token_spend=amount_token_to_spend,
+                                  decimals=native_token_decimals,
+                                  token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
+        buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+        exchange_rate_buy_token = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
+        print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
 
-    # Trisolaris = 0xFa94348467f64D5A457F75F8bc40495D33c65aBB - Aurora
+    buy_amount_readable = float(buy_amount[1]) / (10 ** float(token_to_buy_decimals))
+    minimum_token_received = buy_amount_readable * (1 - slippage_percent)
+    buy_amount_fiat = float(buy_amount_readable) * float(exchange_rate_buy_token)
 
-    # VVS = 0x2D03bECE6747ADC00E1a131BBA1469C15fD11e03 - Cronos
+    print("You will receive ", "{:.5f}".format(buy_amount_readable), token_to_buy_symbol, "(",
+          "{:.5f}".format(minimum_token_received), " at the minimum) for", amount_token_to_spend,
+          token_to_spend_symbol, "spent (≃", "{:.5f}".format(buy_amount_fiat), "dollars.)")
 
-def send_tx():
-    global nonce
-    nonce = web3.eth.get_transaction_count(config.sender_address)
-    gasPrice = web3.eth._gas_price()
-    gasPriceGwei = web3.fromWei(gasPrice, "gwei")
-    finalGasPrice = float(gasPriceGwei) * float(choiceGasPrice)
-    print("UPDATE Timestamp : ", datetime.datetime.now(), " - Gas price of your transaction is", finalGasPrice, "gwei.")
-
-    def setBuyAmount():
-        global buy_amount
-        global buy_amount_stablecoin
-        if DexChosen["Dex"].values[0] == "solarbeam":
-            buy_amount = contract.functions.getAmountsOut(
-                web3.toWei(amountTokenToSpend, "ether"),
-                [nativeTokenAddress, tokenToBuy],  # [SELL, BUY]
-                0 ## solarbearm uses a 3rd argument for "fees" in their getAmountsOut function
-            ).call()
-
-            buy_amount_stablecoin = contract.functions.getAmountsOut(
-                web3.toWei(amountTokenToSpend, "ether"),
-                [nativeTokenAddress, stablecoinTokenAddress], # [SELL, BUY]
-                0
-            ).call()
-        else:
-            buy_amount = contract.functions.getAmountsOut(
-                web3.toWei(amountTokenToSpend, "ether"),
-                [nativeTokenAddress, tokenToBuy]  # [SELL, BUY]
-            ).call()
-
-            buy_amount_stablecoin = contract.functions.getAmountsOut(
-                web3.toWei(amountTokenToSpend, "ether"),
-                [nativeTokenAddress, stablecoinTokenAddress] # [SELL, BUY]
-            ).call()
-
-    setBuyAmount()
-    humanReadable_buyamount = float(web3.fromWei(buy_amount[1], "ether"))
-    humanReadable_buyamount_stablecoin = float(buy_amount_stablecoin[1]) / ( 10 ** float(decimalsStablecoinContract) )
-    humanReadable_entryPrice = float(humanReadable_buyamount_stablecoin) / float(humanReadable_buyamount)
-
-    global minimumTokenReceived
-    minimumTokenReceived = humanReadable_buyamount * (1 - slippage_percent)
-    print("You will receive ", "{:.2f}".format(humanReadable_buyamount), " tokens (", "{:.2f}".format(minimumTokenReceived), " at the minimum) for",
-          amountTokenToSpend, nameNativeContract, "(", symbolNativeContract, ") spent")
-    print("Price in stable coin is : ", "{:.2f}".format(humanReadable_buyamount_stablecoin), symbolStablecoinContract)
-    print("Entry price is : ", "{:.2f}".format(humanReadable_entryPrice), symbolStablecoinContract, "per tokens")
-
-    pair = contract_factory.functions.getPair(tokenToBuy, nativeTokenAddress).call()
-    link = "https://dexscreener.com/" + DexChosen["Blockchain"].values[0] + "/" + pair
+    pair = contract_factory.functions.getPair(token_to_buy_address, token_to_spend_address).call()
+    link = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair
     print("Chart link : ", link)
 
-    if DexChosen["Dex"].values[0] == "traderjoe":
-        tx = contract.functions.swapExactAVAXForTokens(
-            web3.toWei(minimumTokenReceived, 'ether'),
-            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
-            [nativeTokenAddress, tokenToBuy],
+def sendTx():
+    global nonce
+    nonce = web3.eth.get_transaction_count(config.sender_address)
+    getGasPrice(gas_price_multiplier)
+
+    if swap_method_chosen == "1":
+        if dex_chosen["Dex"].values[0] == "traderjoe":
+            tx = contract_router.functions.swapExactAVAXForTokens(
+                web3.toWei(minimum_token_received, 'ether'),
+                # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+                [token_to_spend_address, token_to_buy_address],
+                config.sender_address,
+                (int(time.time()) + 10000)
+            ).buildTransaction({
+                'from': config.sender_address,
+                'value': web3.toWei(amount_token_to_spend, 'ether'),
+                # This is the token BNB amount you want to swap from
+                #'gas': 1000000,
+                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
+                'nonce': nonce
+            })
+
+        else:
+            tx = contract_router.functions.swapExactETHForTokens(
+                web3.toWei(minimum_token_received, 'ether'),
+                # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+                [token_to_spend_address, token_to_buy_address],
+                config.sender_address,
+                (int(time.time()) + 10000)
+            ).buildTransaction({
+                'from': config.sender_address,
+                'value': web3.toWei(amount_token_to_spend, 'ether'),
+                # This is the token BNB amount you want to swap from
+                #'gas': 1000000,
+                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
+                'nonce': nonce
+            })
+    elif swap_method_chosen == "2":
+        tx = contract_router.functions.swapExactTokensForTokens(
+            web3.toWei(amount_token_to_spend, 'ether'),
+            0,
+            #web3.toWei(minimum_token_received, 'ether'),
+            [token_to_spend_address, token_to_buy_address],
             config.sender_address,
             (int(time.time()) + 10000)
         ).buildTransaction({
-            'from': config.sender_address,
-            'value': web3.toWei(amountTokenToSpend, 'ether'),
-            # This is the token BNB amount you want to swap from
-            #'gas': 1000000,
-            'gasPrice': web3.toWei(finalGasPrice, 'gwei'),
-            'nonce': nonce,
+        'from': config.sender_address,
+        'gas': 1000000,
+        'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
+        'nonce': nonce
         })
 
-    else:
-        tx = contract.functions.swapExactETHForTokens(
-            web3.toWei(minimumTokenReceived, 'ether'),
-            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
-            [nativeTokenAddress, tokenToBuy],
-            config.sender_address,
-            (int(time.time()) + 10000)
-        ).buildTransaction({
-            'from': config.sender_address,
-            'value': web3.toWei(amountTokenToSpend, 'ether'),
-            #'gas': 1000000,
-            'gasPrice': web3.toWei(finalGasPrice, 'gwei'),
-            'nonce': nonce,
-        })
+    waitForTxResponse(tx)
 
-    signed_txn = web3.eth.account.sign_transaction(tx, private_key=config.private)
-    tx_token = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
-    tx_link = DexChosen["Explorer"].values[0] + "tx/" + web3.toHex(tx_token)
-    print("Transaction link : ", tx_link)
-    beginning_tx = time.time()
-    tx_receipt = web3.eth.wait_for_transaction_receipt(tx_token)
-    ending_tx = time.time()
-    time_tx = ending_tx - beginning_tx
-    print("Time to execute the transaction : ", time_tx, "seconds.")
-
-    if tx_receipt.status == 1:
-        tx_status = "sent"
-    else:
-        tx_status = "not sent"
-
-    print("Status of the transaction : ", tx_status)
     again = input("Send same transaction ? type 'ok' if you want : ")
+
     if again.lower() == "ok":
-        send_tx()
+        sendTx()
     else:
         print("")
         print("End of the script, send donations if you feel like it : 0xf444955E4dC892198E8a733ffCf08aaA13Bea096 :) ")
@@ -269,7 +396,13 @@ def send_tx():
 
 def main():
     choice_dex()
-    param_tx()
-    send_tx()
+    gasPriceChoice()
+    setSlippage()
+    choice_swap_method()
+    setTokenToSpendParameters()
+    choice_amount_to_spend()
+    setTokenToBuyParameters()
+    setBuyAmount()
+    #sendTx()
 main()
 
