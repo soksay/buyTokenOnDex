@@ -87,6 +87,34 @@ def getGasPrice(multiplier):
     gas_price_final_gwei = float(gas_price_gwei) * float(multiplier)
     print("Timestamp : ", datetime.datetime.now(), " - Gas price of your transactions will be ", gas_price_final_gwei, "gwei.")
 
+
+def checkApproval(contract_token,token_symbol,router,sender,): # return bool
+    # approval max constants
+    max_approval_check_hex = f"0x{15 * '0'}{49 * 'f'}"
+    max_approval_check_int = int(max_approval_check_hex, 16)
+
+    # check allowance of the token to spend
+    print("Checking " + token_symbol + " allowance on router...")
+    token_allowance = contract_token.functions.allowance(sender, router).call()
+    if token_allowance <= max_approval_check_int:
+        print(token_symbol,"is not approved.")
+        return False
+    else:
+        print(token_symbol, "already approved.")
+        return True
+
+def approve(contract_token,token_symbol,router,sender):
+    getGasPrice(gas_price_multiplier)
+    max_approval_hex = f"0x{64 * 'f'}"
+    max_approval_int = int(max_approval_hex, 16)
+    print("Now approving " + token_symbol,"...")
+    tx = contract_token.functions.approve(router, max_approval_int).buildTransaction({
+        'from': sender,
+        'nonce': web3.eth.get_transaction_count(sender),
+        'gasPrice': web3.toWei(gas_price_final_gwei ,"gwei")
+    })
+    return tx
+
 def getNativeTokenPrice(pair_exist):
     global native_token_price
     global native_token_price_readable
@@ -150,6 +178,37 @@ def swapExactNativeForTokens(dex,min_tok_rec,token_spend,token_buy,sender_addres
         })
     return tx
 
+def swapExactTokensForNative(dex,min_tok_rec,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
+    if dex == "traderjoe":
+        tx = contract_router.functions.swapExactTokensForAVAX(
+            web3.toWei(amount_to_spend,"ether"),
+            web3.toWei(min_tok_rec, 'ether'),
+            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
+    else:
+        tx = contract_router.functions.swapExactETHForETH(
+            web3.toWei(amount_to_spend,"ether"),
+            web3.toWei(min_tok_rec, 'ether'),
+            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
+    return tx
+
 def swapExactTokensForTokens(amount_spend,min_received,spend_address,buy_address,sender,gas_price):
     tx = contract_router.functions.swapExactTokensForTokens(
         web3.toWei(amount_spend, 'ether'),
@@ -192,6 +251,9 @@ def choice_dex():
     global stable_coin_symbol
     global stable_coin_decimals
     global dex_chosen
+
+    global router_address
+    global factory_address
 
     global exist_pair_native_stable
 
@@ -236,9 +298,13 @@ def choice_dex():
             address=web3.toChecksumAddress(dex_chosen["RouterAddress"].values[0]),
             abi=dex_chosen["RouterAddressAbi"].values[0])
 
+        router_address = web3.toChecksumAddress(dex_chosen["RouterAddress"].values[0])
+
         contract_factory = web3.eth.contract(
             address=web3.toChecksumAddress(dex_chosen["FactoryAddress"].values[0]),
             abi=dex_chosen["FactoryAddressAbi"].values[0])
+
+        factory_address = web3.toChecksumAddress(dex_chosen["FactoryAddress"].values[0])
 
         exist_pair_native_stable = checkPairExist(contract_factory, native_token_address, native_token_symbol,
                                                   stable_coin_token_address, stable_coin_symbol)
@@ -322,22 +388,13 @@ def setTokenToSpendParameters():
         token_to_spend_symbol = contract_token_to_spend.functions.symbol().call()
         token_to_spend_balance_readable = float(token_to_spend_balance) / (10 ** float(token_to_spend_decimals))
 
-        #check allowance of the token to spend
-        print("Checking " + token_to_spend_symbol + " allowance")
-        token_to_spend_allowance = contract_token_to_spend.functions.allowance(config.sender_address,
-                                               web3.toChecksumAddress(dex_chosen["RouterAddress"].values[0])).call()
-
-        if token_to_spend_allowance == 0:
-            # approve if no allowance
-            print("Now approving " + token_to_spend_symbol)
-            tx = contract_token_to_spend.functions.approve(config.sender_address, native_token_balance).buildTransaction({
-                'from': config.sender_address,
-                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
-                'nonce': web3.eth.get_transaction_count(config.sender_address)
-                })
+        token_to_spend_approval = checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
+                                                ,config.sender_address)
+        if token_to_spend_approval == False:
+            tx = approve(contract_token_to_spend,token_to_spend_symbol,router_address
+                                                ,config.sender_address)
             waitForTxResponse(tx)
-        else:
-            print(token_to_spend_symbol + " already approved : ")
+
 
 # 6) choose token to spend amount
 def choice_amount_to_spend():
@@ -523,5 +580,6 @@ def main():
     setBuyAmount()
     sendTx()
     ending()
-main()
 
+
+main()
