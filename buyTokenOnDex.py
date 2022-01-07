@@ -245,6 +245,7 @@ def choice_dex():
     global native_token_balance_readable
     global native_token_balance
     global native_token_decimals
+    global native_token_abi
 
     global stable_coin_token_address
     global stable_coin_name
@@ -282,7 +283,8 @@ def choice_dex():
         stable_coin_decimals = dex_chosen["StablecoinDecimals"].values[0]
 
         native_token_address = web3.toChecksumAddress(dex_chosen["NativeTokenAddress"].values[0])
-        contract = web3.eth.contract(native_token_address, abi=dex_chosen["NativeTokenAbi"].values[0])
+        native_token_abi = dex_chosen["NativeTokenAbi"].values[0]
+        contract = web3.eth.contract(native_token_address, abi=native_token_abi)
         native_token_name = contract.functions.name().call()
         native_token_symbol = contract.functions.symbol().call()
         native_token_decimals = contract.functions.decimals().call()
@@ -347,12 +349,12 @@ def choice_swap_method():
     print("Choose your swap method : ")
     print(" - Type 1 if you want to swap exact number of " + native_token_symbol + " for token")
     print(" - Type 2 if you want to swap exact number of token A for token B ")
-    #print(" - Type 3 if you want to swap " + symbolNativeContract + " for exact number of token")
+    print(" - Type 3 if you want to swap exact number of a token for " + native_token_symbol )
     #print(" - Type 4 if you want to swap token A for exact number of token B ")
 
     swap_method_chosen = input("Type your choice here : ")
 
-    if (swap_method_chosen == "1" or swap_method_chosen == "2"):
+    if (swap_method_chosen == "1" or swap_method_chosen == "2" or swap_method_chosen == "3"):
         print("You have chosen method " + swap_method_chosen)
     else:
         print("You have to choose between the options proposed. Retry.")
@@ -378,7 +380,7 @@ def setTokenToSpendParameters():
         token_to_spend_symbol = native_token_symbol
         token_to_spend_balance_readable = native_token_balance_readable
 
-    elif swap_method_chosen == "2": # Here token to spend parameters have to be requested
+    elif swap_method_chosen == "2" or swap_method_chosen == "3": # Here token to spend parameters have to be requested
 
         token_to_spend_address = chooseToken(method="spend")
         token_to_spend_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
@@ -387,29 +389,43 @@ def setTokenToSpendParameters():
         token_to_spend_decimals = contract_token_to_spend.functions.decimals().call()
         token_to_spend_symbol = contract_token_to_spend.functions.symbol().call()
         token_to_spend_balance_readable = float(token_to_spend_balance) / (10 ** float(token_to_spend_decimals))
-
         token_to_spend_approval = checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
                                                 ,config.sender_address)
-        if token_to_spend_approval == False:
-            tx = approve(contract_token_to_spend,token_to_spend_symbol,router_address
-                                                ,config.sender_address)
-            waitForTxResponse(tx)
-
 
 # 6) choose token to spend amount
 def choice_amount_to_spend():
     # Defined in 6)
     global amount_token_to_spend
+    if swap_method_chosen == "3":
+        print("/!\ the transaction will be sent directly after this step /!\ ")
 
-    print("You have ", "{:.5f}".format(token_to_spend_balance_readable) , " ", token_to_spend_symbol, " in your wallet")
+    print("You have ", "{:.18f}".format(token_to_spend_balance_readable) , " ", token_to_spend_symbol, " in your wallet")
     print("How many", token_to_spend_symbol, "do you want to spend ?")
-    amount_token_to_spend = input("Select the amount here : ")
-    """
-    if float(amount_token_to_spend) >= float(token_to_spend_balance_readable):
-        print("The value selected must be inferior to : ", token_to_spend_balance_readable)
-        print("")
+    print("Type :")
+    print(" - '1' if you want to spend a fixed amount ")
+    print(" - '2' if you want to spend a percentage of your token balance  ")
+    choice_amount_to_spend = input("Type your selection here : ")
+
+    if choice_amount_to_spend == "1":
+        amount_token_to_spend = input("Select the amount of token that you want to sell : ")
+        if 0 > float(amount_token_to_spend) >= float(token_to_spend_balance_readable):
+            print("The value selected must be inferior to : ", token_to_spend_balance_readable, ", nor negative.")
+            print("")
+            choice_amount_to_spend()
+    elif choice_amount_to_spend == "2":
+        percentage = float(input("Select percentage of your token balance you want to sell (between 0.1 to 100):"))\
+                     / 100
+        if 0 < percentage < 1:
+            amount_token_to_spend = float(token_to_spend_balance_readable) * float(percentage)
+        else:
+            print("Please select a correct percentage.")
+            choice_amount_to_spend()
+
+    else:
+        print("Please choose between the option proposed.")
         choice_amount_to_spend()
-    """
+
+
 
 # 7) set parameters for token to buy
 def setTokenToBuyParameters():
@@ -420,9 +436,15 @@ def setTokenToBuyParameters():
     global token_to_buy_symbol
     global token_to_buy_balance_readable
 
-    print("/!\ the transaction will be sent directly after this step /!\ ")
-    token_to_buy_address = chooseToken(method="buy")
-    token_to_buy_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
+
+    if swap_method_chosen != "3":
+        print("/!\ the transaction will be sent directly after this step /!\ ")
+        token_to_buy_address = chooseToken(method="buy")
+        token_to_buy_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
+    else:
+        token_to_buy_address = native_token_address
+        token_to_buy_abi = native_token_abi
+
     contract_token_to_buy = web3.eth.contract(token_to_buy_address, abi=token_to_buy_abi)
     token_to_buy_balance = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
     token_to_buy_decimals = contract_token_to_buy.functions.decimals().call()
@@ -435,19 +457,76 @@ def setBuyAmount():
     global minimum_token_received
     global trading_pair_exist
     global exist_pair_token_to_spend_token_to_buy
+    global exist_pair_token_to_spend_native
 
-    exist_pair_token_to_buy_native = checkPairExist(contract_factory, token_to_buy_address , token_to_buy_symbol,
-                                                    native_token_address, native_token_symbol)
+    exist_pair_token_to_buy_native = checkPairExist(contract_factory,
+                                                    native_token_address , native_token_symbol
+                                                     , token_to_buy_address, token_to_buy_symbol )
 
-    getNativeTokenPrice(exist_pair_native_stable)
+    exist_pair_token_to_spend_native = checkPairExist(contract_factory,
+                                                      native_token_address , native_token_symbol
+                                                      , token_to_spend_address, token_to_spend_symbol)
+
+    exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
+                                                            token_to_buy_address, token_to_buy_symbol,
+                                                            token_to_spend_address, token_to_spend_symbol)
+
+    getNativeTokenPrice(exist_pair_native_stable) #On actualise les données de prix du token
 
     if token_to_spend_address != native_token_address:
-
-        #Amount of token that we want to spend in native blockchain token
-        if exist_pair_token_to_buy_native == True:
-            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=amount_token_to_spend,
+        if exist_pair_token_to_spend_native == True and exist_pair_token_to_spend_token_to_buy == True :
+            # Get token price A and B given A
+            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                                   amount_token_spend=amount_token_to_spend,
                                                    decimals=token_to_spend_decimals,
-                                                 token_to_spend=token_to_spend_address, token_to_buy=native_token_address)
+                                                   token_to_spend=token_to_spend_address,
+                                                   token_to_buy=native_token_address)
+            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                      amount_token_spend=amount_token_to_spend,
+                                      decimals=token_to_spend_decimals,
+                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
+            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+
+            token_to_spend_price_fiat = (float(buy_amount_native_token_ether) /float(amount_token_to_spend)) * \
+                                        float(native_token_price_readable)
+            token_to_buy_price_fiat = (float(amount_token_to_spend) / float(buy_amount_ether)) * \
+                                      float(token_to_spend_price_fiat)
+
+            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+        elif  exist_pair_token_to_buy_native == True and exist_pair_token_to_spend_token_to_buy == True :
+            # Get token price A and B given B
+            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                      amount_token_spend=amount_token_to_spend,
+                                      decimals=token_to_spend_decimals,
+                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
+            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                               amount_token_spend=returnEtherValue(buy_amount[1], token_to_buy_decimals),
+                                               decimals=token_to_buy_decimals,
+                                               token_to_spend=token_to_buy_address,
+                                               token_to_buy=native_token_address)
+            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+
+            token_to_buy_price_fiat = (float(buy_amount_native_token_ether) / float(buy_amount_ether)) * \
+                                      float(native_token_price_readable)
+
+            token_to_spend_price_fiat = (float(buy_amount_ether) / float(amount_token_to_spend)) * \
+                                        float(token_to_buy_price_fiat)
+
+            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+
+        elif exist_pair_token_to_spend_token_to_buy == False :
+        #Case where token to buy and token to spend don't have a LP
+            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                                   amount_token_spend=amount_token_to_spend,
+                                                   decimals=token_to_spend_decimals,
+                                                   token_to_spend=token_to_spend_address,
+                                                   token_to_buy=native_token_address)
             # Amount in native blockchain token converted to token we want to spend
             buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
                                       amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
@@ -456,46 +535,36 @@ def setBuyAmount():
 
             buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
             buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-            exchange_rate_spend_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable) ) / float(amount_token_to_spend)
-            exchange_rate_buy_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable)) / float(buy_amount_ether)
-            #entry_price = exchange_rate_buy_token :)
-            print("Exchange rate for 1", token_to_spend_symbol ,":", "{:.5f}".format(exchange_rate_spend_token) + " dollars")
-            print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+            token_to_spend_price_fiat = (float(buy_amount_native_token_ether) * float(
+                native_token_price_readable)) / float(amount_token_to_spend)
+            token_to_buy_price_fiat = (float(buy_amount_native_token_ether) * float(
+                native_token_price_readable)) / float(buy_amount_ether)
+
+            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
         else:
-            # In case you buy a new token
-            # Amount in native blockchain token converted to token we want to spend
-            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                      amount_token_spend=amount_token_to_spend,
-                                      decimals=token_to_spend_decimals,
-                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
-
-            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-            exchange_rate_buy_token = float(buy_amount_ether) / float(amount_token_to_spend)
-            print("Exchange rate for 1", token_to_buy_symbol, ":",
-                  "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+            print("There is no liquidity pair at all between the tokens you want to swap")
+            print("Impossible to fetch price")
+            exit()
 
     else:
+        #Token to spend est natif
         buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
                                   amount_token_spend=amount_token_to_spend,
                                   decimals=native_token_decimals,
                                   token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
         buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-        exchange_rate_buy_token = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
-        print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+        token_to_buy_price_fiat = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
+        print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
-    buy_amount_readable = float(buy_amount[1]) / (10 ** float(token_to_buy_decimals))
-    minimum_token_received = buy_amount_readable * (1 - slippage_percent)
-    buy_amount_fiat = float(buy_amount_readable) * float(exchange_rate_buy_token)
+    minimum_token_received = float(buy_amount_ether) * (1 - slippage_percent) #In ether
 
-    print("You will receive ", "{:.5f}".format(buy_amount_readable), token_to_buy_symbol, "(",
+    print("You will receive ", "{:.5f}".format(buy_amount_ether), token_to_buy_symbol, "(",
           "{:.5f}".format(minimum_token_received), " at the minimum) for", amount_token_to_spend,
-          token_to_spend_symbol, "spent (≃", "{:.5f}".format(buy_amount_fiat), "dollars.)")
+          token_to_spend_symbol)
 
-    exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
-                                                            token_to_buy_address, token_to_buy_symbol,
-                                                            token_to_spend_address, token_to_spend_symbol)
-    if exist_pair_token_to_spend_token_to_buy == True:
+    if  exist_pair_token_to_spend_token_to_buy == True:
         pair = contract_factory.functions.getPair(token_to_buy_address, token_to_spend_address).call()
         link = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair
         print("Chart link : ", link)
@@ -530,7 +599,15 @@ def sendTx():
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
                   token_to_buy_symbol + " doesn't exist")
             ending()
-
+    elif swap_method_chosen == "3":
+        if exist_pair_token_to_spend_token_to_buy == True:
+            tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],minimum_token_received,token_to_spend_address,
+                                         token_to_buy_address,config.sender_address,
+                                        amount_token_to_spend,gas_price_final_gwei )
+        elif exist_pair_token_to_spend_token_to_buy == False:
+            print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
+                  token_to_buy_symbol + " doesn't exist")
+            ending()
     waitForTxResponse(tx)
 
 
@@ -580,6 +657,5 @@ def main():
     setBuyAmount()
     sendTx()
     ending()
-
 
 main()
