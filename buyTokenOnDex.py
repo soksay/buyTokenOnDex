@@ -8,6 +8,23 @@ import datetime
 Utility functions 
 """
 
+def checkPairExist(contract_factory,token_a,symb_a,token_b, symb_b): #Return boom
+    token_a = token_a
+    token_b = token_b
+
+    symb_a = symb_a
+    symb_b = symb_b
+
+    print("Checking existence of token pair on factory :", symb_a ,"/", symb_b)
+    pair = contract_factory.functions.getPair(token_a, token_b).call()
+    if pair == "0x0000000000000000000000000000000000000000":
+        bool = False
+        print("Pair doesn't exist")
+    else:
+        bool = True
+        print("Pair exist")
+    return bool
+
 
 def waitForTxResponse(tx):
     signed_txn = web3.eth.account.sign_transaction(tx, private_key=config.private)
@@ -26,7 +43,6 @@ def waitForTxResponse(tx):
         tx_status = "not sent"
 
     print("Status of the transaction : ", tx_status)
-
 
 def getAmountOut(dex, amount_token_spend,decimals, token_to_spend, token_to_buy):
 
@@ -71,16 +87,22 @@ def getGasPrice(multiplier):
     gas_price_final_gwei = float(gas_price_gwei) * float(multiplier)
     print("Timestamp : ", datetime.datetime.now(), " - Gas price of your transactions will be ", gas_price_final_gwei, "gwei.")
 
-def getNativeTokenPrice():
+def getNativeTokenPrice(pair_exist):
     global native_token_price
     global native_token_price_readable
-    native_token_price = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=1,
-                                      decimals=native_token_decimals,
-                                      token_to_spend=native_token_address, token_to_buy=stable_coin_token_address)
 
-    native_token_price_readable = float(native_token_price[1]) / (10 ** float(stable_coin_decimals))
-    print("Timestamp : ", datetime.datetime.now(),"- the price for 1", native_token_symbol, "is",
-          native_token_price_readable, stable_coin_symbol)
+    if pair_exist == True:
+        native_token_price = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=1,
+                                          decimals=native_token_decimals,
+                                          token_to_spend=native_token_address, token_to_buy=stable_coin_token_address)
+
+        native_token_price_readable = float(native_token_price[1]) / (10 ** float(stable_coin_decimals))
+        print("Timestamp : ", datetime.datetime.now(),"- the price for 1", native_token_symbol, "is",
+              native_token_price_readable, stable_coin_symbol)
+    else:
+        print("There's not trading pair between " + native_token_symbol + "and" + stable_coin_symbol)
+        print("Something is wrong please check and retry.")
+        exit()
 
 def chooseToken(method):
     token_chosen = input("Enter the address of the token you want to " + method + " : ")
@@ -92,6 +114,57 @@ def chooseToken(method):
         chooseToken()
     return token_chosen_address
 
+
+
+def swapExactNativeForTokens(dex,min_tok_rec,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
+    if dex == "traderjoe":
+        tx = contract_router.functions.swapExactAVAXForTokens(
+            web3.toWei(min_tok_rec, 'ether'),
+            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'value': web3.toWei(amount_to_spend, 'ether'),
+            # This is the token BNB amount you want to swap from
+            # 'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
+
+    else:
+        tx = contract_router.functions.swapExactETHForTokens(
+            web3.toWei(min_tok_rec, 'ether'),
+            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'value': web3.toWei(amount_to_spend, 'ether'),
+            # This is the token BNB amount you want to swap from
+            # 'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
+    return tx
+
+def swapExactTokensForTokens(amount_spend,min_received,spend_address,buy_address,sender,gas_price):
+    tx = contract_router.functions.swapExactTokensForTokens(
+        web3.toWei(amount_spend, 'ether'),
+        web3.toWei(min_received, 'ether'),
+        [spend_address, buy_address],
+        sender,
+        (int(time.time()) + 10000)
+    ).buildTransaction({
+        'from': sender,
+        'gas': 1000000,
+        'gasPrice': web3.toWei(gas_price, 'gwei'),
+        'nonce': nonce
+    })
+    return tx
+
 """
 End utility functions 
 """
@@ -102,6 +175,26 @@ Execution functions
 
 #1) choose the dex and initiate parameters
 def choice_dex():
+    # Defined in 1)
+    global contract_router
+    global contract_factory
+
+    global web3
+    global native_token_address
+    global native_token_name
+    global native_token_symbol
+    global native_token_balance_readable
+    global native_token_balance
+    global native_token_decimals
+
+    global stable_coin_token_address
+    global stable_coin_name
+    global stable_coin_symbol
+    global stable_coin_decimals
+    global dex_chosen
+
+    global exist_pair_native_stable
+
     df = pd.read_excel("dex_parameters.xlsx")
     liste_dex = df["Dex"].values
 
@@ -116,23 +209,6 @@ def choice_dex():
         else:
             validation = False
     if validation == True:
-        global contract_router
-        global contract_factory
-
-        global web3
-        global native_token_address
-        global native_token_name
-        global native_token_symbol
-        global native_token_balance_readable
-        global native_token_balance
-        global native_token_decimals
-
-        global stable_coin_token_address
-        global stable_coin_name
-        global stable_coin_symbol
-        global stable_coin_decimals
-        global dex_chosen
-
 
         dex_chosen = df.loc[df['Dex'] == choiceDex]
 
@@ -164,7 +240,9 @@ def choice_dex():
             address=web3.toChecksumAddress(dex_chosen["FactoryAddress"].values[0]),
             abi=dex_chosen["FactoryAddressAbi"].values[0])
 
-        getNativeTokenPrice()
+        exist_pair_native_stable = checkPairExist(contract_factory, native_token_address, native_token_symbol,
+                                                  stable_coin_token_address, stable_coin_symbol)
+        getNativeTokenPrice(exist_pair_native_stable)
 
         print("You have chosen DEX : ", dex_chosen["Dex"].values[0])
 
@@ -175,6 +253,7 @@ def choice_dex():
 
 #2) Set gas price multiplier
 def gasPriceChoice():
+    # Defined in 2)
     global gas_price_multiplier
     print("Current gas price is :",  web3.fromWei(web3.eth._gas_price(),"gwei") ,"gwei on the blockchain",
         dex_chosen["Blockchain"].values[0])
@@ -184,9 +263,11 @@ def gasPriceChoice():
 
 #3) Set slippage parameters (up to 99%)
 def setSlippage():
+    # Defined in 3)
+    global slippage_percent
+
     slippage = float(input("Select the slippage (between 0.1 and 99.9): "))
     if 0.1 <= slippage <= 99.9:
-        global slippage_percent
         slippage_percent = slippage / 100
     else:
         print("Slippage must be set between 0.1 and 99.9. Retry.")
@@ -195,6 +276,7 @@ def setSlippage():
 
 #4) Set choice swap method
 def choice_swap_method():
+    # Defined in 4)
     global swap_method_chosen
     print("Choose your swap method : ")
     print(" - Type 1 if you want to swap exact number of " + native_token_symbol + " for token")
@@ -214,6 +296,7 @@ def choice_swap_method():
 #5) Set token to spend parameters depending on swap method chosen
 
 def setTokenToSpendParameters():
+    # Defined in 5)
     global amountTokenToSpend
     global token_to_spend_balance
     global token_to_spend_decimals
@@ -258,7 +341,9 @@ def setTokenToSpendParameters():
 
 # 6) choose token to spend amount
 def choice_amount_to_spend():
+    # Defined in 6)
     global amount_token_to_spend
+
     print("You have ", "{:.5f}".format(token_to_spend_balance_readable) , " ", token_to_spend_symbol, " in your wallet")
     print("How many", token_to_spend_symbol, "do you want to spend ?")
     amount_token_to_spend = input("Select the amount here : ")
@@ -271,6 +356,7 @@ def choice_amount_to_spend():
 
 # 7) set parameters for token to buy
 def setTokenToBuyParameters():
+    # Defined in 7)
     global token_to_buy_address
     global token_to_buy_balance
     global token_to_buy_decimals
@@ -288,28 +374,50 @@ def setTokenToBuyParameters():
 
 # 8) Set buy amount
 def setBuyAmount():
+    # Defined in 8)
     global minimum_token_received
+    global trading_pair_exist
+    global exist_pair_token_to_spend_token_to_buy
 
-    getNativeTokenPrice()
+    exist_pair_token_to_buy_native = checkPairExist(contract_factory, token_to_buy_address , token_to_buy_symbol,
+                                                    native_token_address, native_token_symbol)
+
+    getNativeTokenPrice(exist_pair_native_stable)
 
     if token_to_spend_address != native_token_address:
-        #Amount of token that we want to spend in native blockchain token
-        buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=amount_token_to_spend,
-                                               decimals=token_to_spend_decimals,
-                                             token_to_spend=token_to_spend_address, token_to_buy=native_token_address)
-        # Amount in native blockchain token converted to token we want to spend
-        buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                  amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
-                                  decimals=native_token_decimals,
-                                  token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
 
-        buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
-        buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-        exchange_rate_spend_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable) ) / float(amount_token_to_spend)
-        exchange_rate_buy_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable)) / float(buy_amount_ether)
-        #entry_price = exchange_rate_buy_token :)
-        print("Exchange rate for 1", token_to_spend_symbol ,":", "{:.5f}".format(exchange_rate_spend_token) + " dollars")
-        print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+        #Amount of token that we want to spend in native blockchain token
+        if exist_pair_token_to_buy_native == True:
+            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0], amount_token_spend=amount_token_to_spend,
+                                                   decimals=token_to_spend_decimals,
+                                                 token_to_spend=token_to_spend_address, token_to_buy=native_token_address)
+            # Amount in native blockchain token converted to token we want to spend
+            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                      amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
+                                      decimals=native_token_decimals,
+                                      token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
+
+            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+            exchange_rate_spend_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable) ) / float(amount_token_to_spend)
+            exchange_rate_buy_token = (float(buy_amount_native_token_ether) * float(native_token_price_readable)) / float(buy_amount_ether)
+            #entry_price = exchange_rate_buy_token :)
+            print("Exchange rate for 1", token_to_spend_symbol ,":", "{:.5f}".format(exchange_rate_spend_token) + " dollars")
+            print("Exchange rate for 1", token_to_buy_symbol,":", "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+
+        else:
+            # In case you buy a new token
+            # Amount in native blockchain token converted to token we want to spend
+            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                      amount_token_spend=amount_token_to_spend,
+                                      decimals=token_to_spend_decimals,
+                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
+
+            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+            exchange_rate_buy_token = float(buy_amount_ether) / float(amount_token_to_spend)
+            print("Exchange rate for 1", token_to_buy_symbol, ":",
+                  "{:.5f}".format(exchange_rate_buy_token) + " dollars")
+
     else:
         buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
                                   amount_token_spend=amount_token_to_spend,
@@ -327,72 +435,82 @@ def setBuyAmount():
           "{:.5f}".format(minimum_token_received), " at the minimum) for", amount_token_to_spend,
           token_to_spend_symbol, "spent (≃", "{:.5f}".format(buy_amount_fiat), "dollars.)")
 
-    pair = contract_factory.functions.getPair(token_to_buy_address, token_to_spend_address).call()
-    link = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair
-    print("Chart link : ", link)
+    exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
+                                                            token_to_buy_address, token_to_buy_symbol,
+                                                            token_to_spend_address, token_to_spend_symbol)
+    if exist_pair_token_to_spend_token_to_buy == True:
+        pair = contract_factory.functions.getPair(token_to_buy_address, token_to_spend_address).call()
+        link = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair
+        print("Chart link : ", link)
+    else:
+        pair_to_spend = contract_factory.functions.getPair(token_to_buy_address, native_token_address).call()
+        link_spend = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair_to_spend
 
+        pair_to_buy = contract_factory.functions.getPair(token_to_spend_address, native_token_address).call()
+        link_to_buy = "https://dexscreener.com/" + dex_chosen["Blockchain"].values[0] + "/" + pair_to_buy
+
+        print("Chart link token to spend : ", link_spend)
+        print("Chart link token to buy : ", link_to_buy)
+
+#9) Send transaction
 def sendTx():
+    # Defined in 9)
     global nonce
+
     nonce = web3.eth.get_transaction_count(config.sender_address)
     getGasPrice(gas_price_multiplier)
 
     if swap_method_chosen == "1":
-        if dex_chosen["Dex"].values[0] == "traderjoe":
-            tx = contract_router.functions.swapExactAVAXForTokens(
-                web3.toWei(minimum_token_received, 'ether'),
-                # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
-                [token_to_spend_address, token_to_buy_address],
-                config.sender_address,
-                (int(time.time()) + 10000)
-            ).buildTransaction({
-                'from': config.sender_address,
-                'value': web3.toWei(amount_token_to_spend, 'ether'),
-                # This is the token BNB amount you want to swap from
-                #'gas': 1000000,
-                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
-                'nonce': nonce
-            })
-
-        else:
-            tx = contract_router.functions.swapExactETHForTokens(
-                web3.toWei(minimum_token_received, 'ether'),
-                # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
-                [token_to_spend_address, token_to_buy_address],
-                config.sender_address,
-                (int(time.time()) + 10000)
-            ).buildTransaction({
-                'from': config.sender_address,
-                'value': web3.toWei(amount_token_to_spend, 'ether'),
-                # This is the token BNB amount you want to swap from
-                #'gas': 1000000,
-                'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
-                'nonce': nonce
-            })
+        tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], minimum_token_received, token_to_spend_address
+                                      , token_to_buy_address, config.sender_address, amount_token_to_spend
+                                      , gas_price_final_gwei)
     elif swap_method_chosen == "2":
-        tx = contract_router.functions.swapExactTokensForTokens(
-            web3.toWei(amount_token_to_spend, 'ether'),
-            0,
-            #web3.toWei(minimum_token_received, 'ether'),
-            [token_to_spend_address, token_to_buy_address],
-            config.sender_address,
-            (int(time.time()) + 10000)
-        ).buildTransaction({
-        'from': config.sender_address,
-        'gas': 1000000,
-        'gasPrice': web3.toWei(gas_price_final_gwei, 'gwei'),
-        'nonce': nonce
-        })
+        if exist_pair_token_to_spend_token_to_buy == True:
+            tx = swapExactTokensForTokens(amount_token_to_spend,minimum_token_received,
+                                         token_to_spend_address,token_to_buy_address,
+                                         config.sender_address,gas_price_final_gwei )
+        elif exist_pair_token_to_spend_token_to_buy == False:
+            print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
+                  token_to_buy_symbol + " doesn't exist")
+            ending()
 
     waitForTxResponse(tx)
 
-    again = input("Send same transaction ? type 'ok' if you want : ")
 
-    if again.lower() == "ok":
-        sendTx()
-    else:
-        print("")
-        print("End of the script, send donations if you feel like it : 0xf444955E4dC892198E8a733ffCf08aaA13Bea096 :) ")
-        exit()
+def ending():
+    if exist_pair_token_to_spend_token_to_buy == True:
+        # cas 1 classique
+        print("Type : ")
+        print(" - 'same' if you want to send the same transaction ")
+        print(" - 'restart' if you want to restart")
+        print(" - 'quit' if you want to quit")
+        next_move = input("Type your choice : ")
+        if next_move.lower() == "same":
+            print("Sending same transaction...")
+            sendTx()
+        elif next_move.lower() == "restart":
+            print("Reloading script ...")
+            main()
+        elif next_move.lower() == "quit":
+            print("")
+            print(
+                "End of the script, send donations if you feel like it : 0xf444955E4dC892198E8a733ffCf08aaA13Bea096 :) ")
+            exit()
+
+    elif exist_pair_token_to_spend_token_to_buy == False:
+        # cas 2 pair inexistante
+        print("Type : ")
+        print(" - 'restart' if you want to restart")
+        print(" - 'quit' if you want to quit")
+        next_move = input("Type your choice : ")
+        if next_move.lower() == "restart":
+            print("Reloading script ...")
+            main()
+        elif next_move.lower() == "quit":
+            print("")
+            print(
+                "End of the script, send donations if you feel like it : 0xf444955E4dC892198E8a733ffCf08aaA13Bea096 :) ")
+            exit()
 
 def main():
     choice_dex()
@@ -403,6 +521,7 @@ def main():
     choice_amount_to_spend()
     setTokenToBuyParameters()
     setBuyAmount()
-    #sendTx()
+    sendTx()
+    ending()
 main()
 
