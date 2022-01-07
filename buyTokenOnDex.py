@@ -194,7 +194,7 @@ def swapExactTokensForNative(dex,min_tok_rec,token_spend,token_buy,sender_addres
             'nonce': nonce
         })
     else:
-        tx = contract_router.functions.swapExactETHForETH(
+        tx = contract_router.functions.swapExactTokensForETH(
             web3.toWei(amount_to_spend,"ether"),
             web3.toWei(min_tok_rec, 'ether'),
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
