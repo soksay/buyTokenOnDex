@@ -97,6 +97,7 @@ def checkApproval(contract_token,token_symbol,router,sender,): # return bool
     print("Checking " + token_symbol + " allowance on router...")
     token_allowance = contract_token.functions.allowance(sender, router).call()
     if token_allowance <= max_approval_check_int:
+        approve(contract_token,token_symbol,router,sender)
         print(token_symbol,"is not approved.")
         return False
     else:
@@ -142,9 +143,10 @@ def chooseToken(method):
         chooseToken()
     return token_chosen_address
 
+def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_spend,gas_price, decimals):
 
+    amount_to_spend = int(float(amount_to_spend) * (10 ** float(decimals)))
 
-def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
     if dex == "traderjoe":
         tx = contract_router.functions.swapExactAVAXForTokens(
             0,
@@ -154,7 +156,7 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             (int(time.time()) + 10000)
         ).buildTransaction({
             'from': config.sender_address,
-            'value': web3.toWei(amount_to_spend, 'ether'),
+            'value': amount_to_spend,
             # This is the token BNB amount you want to swap from
             # 'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
@@ -169,7 +171,7 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             (int(time.time()) + 10000)
         ).buildTransaction({
             'from': config.sender_address,
-            'value': web3.toWei(amount_to_spend, 'ether'),
+            'value': amount_to_spend,
             # This is the token BNB amount you want to swap from
             # 'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
@@ -177,10 +179,13 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
         })
     return tx
 
-def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
+def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_spend,gas_price,decimals):
+
+    amount_to_spend = int(float(amount_spend) * (10 ** float(decimals)))
+
     if dex == "traderjoe":
         tx = contract_router.functions.swapExactTokensForAVAX(
-            web3.toWei(amount_to_spend,"ether"),
+            amount_to_spend,
             0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
@@ -194,7 +199,7 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_to_
         })
     else:
         tx = contract_router.functions.swapExactTokensForETH(
-            web3.toWei(amount_to_spend,"ether"),
+            amount_to_spend,
             0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
@@ -208,9 +213,12 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_to_
         })
     return tx
 
-def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_price):
+def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_price,decimals):
+
+    amount_to_spend = int(float(amount_spend) * (10 ** float(decimals)))
+
     tx = contract_router.functions.swapExactTokensForTokens(
-        web3.toWei(amount_spend, 'ether'),
+        amount_to_spend,
         0,
         [spend_address, buy_address],
         sender,
@@ -219,6 +227,9 @@ def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_p
         'from': sender,
         'gas': 1000000,
         'gasPrice': web3.toWei(gas_price, 'gwei'),
+
+        #'maxFeePerGas': web3.toWei(gas_price, 'gwei'),
+        #'maxPriorityFeePerGas': web3.toWei(gas_price, 'gwei'),
         'nonce': nonce
     })
     return tx
@@ -371,7 +382,7 @@ def setTokenToSpendParameters():
         token_to_spend_decimals = contract_token_to_spend.functions.decimals().call()
         token_to_spend_symbol = contract_token_to_spend.functions.symbol().call()
         token_to_spend_balance_readable = float(token_to_spend_balance) / (10 ** float(token_to_spend_decimals))
-        token_to_spend_approval = checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
+        checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
                                                 ,config.sender_address)
 
 # 5) choose token to spend amount
@@ -563,20 +574,21 @@ def sendTx():
     if swap_method_chosen == "1":
         tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], token_to_spend_address
                                       , token_to_buy_address, config.sender_address, amount_token_to_spend
-                                      , gas_price_final_gwei)
+                                      , gas_price_final_gwei, token_to_spend_decimals)
     elif swap_method_chosen == "2":
         if exist_pair_token_to_spend_token_to_buy == True:
             tx = swapExactTokensForTokens(amount_token_to_spend, token_to_spend_address,token_to_buy_address,
-                                         config.sender_address,gas_price_final_gwei )
+                                             config.sender_address,gas_price_final_gwei, token_to_spend_decimals)
         elif exist_pair_token_to_spend_token_to_buy == False:
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
                   token_to_buy_symbol + " doesn't exist")
             ending()
+
     elif swap_method_chosen == "3":
         if exist_pair_token_to_spend_token_to_buy == True:
             tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],token_to_spend_address,
                                          token_to_buy_address,config.sender_address,
-                                        amount_token_to_spend,gas_price_final_gwei )
+                                        amount_token_to_spend,gas_price_final_gwei , token_to_spend_decimals)
         elif exist_pair_token_to_spend_token_to_buy == False:
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
                   token_to_buy_symbol + " doesn't exist")
