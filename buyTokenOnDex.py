@@ -144,10 +144,10 @@ def chooseToken(method):
 
 
 
-def swapExactNativeForTokens(dex,min_tok_rec,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
+def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
     if dex == "traderjoe":
         tx = contract_router.functions.swapExactAVAXForTokens(
-            web3.toWei(min_tok_rec, 'ether'),
+            0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
             sender_address,
@@ -163,8 +163,7 @@ def swapExactNativeForTokens(dex,min_tok_rec,token_spend,token_buy,sender_addres
 
     else:
         tx = contract_router.functions.swapExactETHForTokens(
-            web3.toWei(min_tok_rec, 'ether'),
-            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            0, # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
             sender_address,
             (int(time.time()) + 10000)
@@ -178,11 +177,11 @@ def swapExactNativeForTokens(dex,min_tok_rec,token_spend,token_buy,sender_addres
         })
     return tx
 
-def swapExactTokensForNative(dex,min_tok_rec,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
+def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_to_spend,gas_price):
     if dex == "traderjoe":
         tx = contract_router.functions.swapExactTokensForAVAX(
             web3.toWei(amount_to_spend,"ether"),
-            web3.toWei(min_tok_rec, 'ether'),
+            0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
             sender_address,
@@ -196,7 +195,7 @@ def swapExactTokensForNative(dex,min_tok_rec,token_spend,token_buy,sender_addres
     else:
         tx = contract_router.functions.swapExactTokensForETH(
             web3.toWei(amount_to_spend,"ether"),
-            web3.toWei(min_tok_rec, 'ether'),
+            0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
             [token_spend, token_buy],
             sender_address,
@@ -209,10 +208,10 @@ def swapExactTokensForNative(dex,min_tok_rec,token_spend,token_buy,sender_addres
         })
     return tx
 
-def swapExactTokensForTokens(amount_spend,min_received,spend_address,buy_address,sender,gas_price):
+def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_price):
     tx = contract_router.functions.swapExactTokensForTokens(
         web3.toWei(amount_spend, 'ether'),
-        web3.toWei(min_received, 'ether'),
+        0,
         [spend_address, buy_address],
         sender,
         (int(time.time()) + 10000)
@@ -234,7 +233,6 @@ Execution functions
 
 #1) choose the dex and initiate parameters
 def choice_dex():
-    # Defined in 1)
     global contract_router
     global contract_factory
 
@@ -321,7 +319,6 @@ def choice_dex():
 
 #2) Set gas price multiplier
 def gasPriceChoice():
-    # Defined in 2)
     global gas_price_multiplier
     print("Current gas price is :",  web3.fromWei(web3.eth._gas_price(),"gwei") ,"gwei on the blockchain",
         dex_chosen["Blockchain"].values[0])
@@ -329,22 +326,8 @@ def gasPriceChoice():
     gas_price_multiplier = input(("Please select a multiplier on the current gas price : "))
     getGasPrice(gas_price_multiplier)
 
-#3) Set slippage parameters (up to 99%)
-def setSlippage():
-    # Defined in 3)
-    global slippage_percent
-
-    slippage = float(input("Select the slippage (between 0.1 and 99.9): "))
-    if 0.1 <= slippage <= 99.9:
-        slippage_percent = slippage / 100
-    else:
-        print("Slippage must be set between 0.1 and 99.9. Retry.")
-        print("")
-        setSlippage()
-
-#4) Set choice swap method
+#3) Set choice swap method
 def choice_swap_method():
-    # Defined in 4)
     global swap_method_chosen
     print("Choose your swap method : ")
     print(" - Type 1 if you want to swap exact number of " + native_token_symbol + " for token")
@@ -361,10 +344,9 @@ def choice_swap_method():
         choice_swap_method()
 
 
-#5) Set token to spend parameters depending on swap method chosen
+#4) Set token to spend parameters depending on swap method chosen
 
 def setTokenToSpendParameters():
-    # Defined in 5)
     global amountTokenToSpend
     global token_to_spend_balance
     global token_to_spend_decimals
@@ -392,9 +374,8 @@ def setTokenToSpendParameters():
         token_to_spend_approval = checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
                                                 ,config.sender_address)
 
-# 6) choose token to spend amount
+# 5) choose token to spend amount
 def choice_amount_to_spend():
-    # Defined in 6)
     global amount_token_to_spend
     if swap_method_chosen == "3":
         print("/!\ the transaction will be sent directly after this step /!\ ")
@@ -403,7 +384,7 @@ def choice_amount_to_spend():
     print("How many", token_to_spend_symbol, "do you want to spend ?")
     print("Type :")
     print(" - '1' if you want to spend a fixed amount ")
-    print(" - '2' if you want to spend a percentage of your token balance  ")
+    print(" - '2' if you want to spend a percentage of your token balance ")
     choice_amount_to_spend = input("Type your selection here : ")
 
     if choice_amount_to_spend == "1":
@@ -427,9 +408,8 @@ def choice_amount_to_spend():
 
 
 
-# 7) set parameters for token to buy
+# 6) set parameters for token to buy
 def setTokenToBuyParameters():
-    # Defined in 7)
     global token_to_buy_address
     global token_to_buy_balance
     global token_to_buy_decimals
@@ -451,10 +431,8 @@ def setTokenToBuyParameters():
     token_to_buy_symbol = contract_token_to_buy.functions.symbol().call()
     token_to_buy_balance_readable = float(token_to_buy_balance) / (10 ** float(token_to_buy_decimals))
 
-# 8) Set buy amount
+# 7) Set buy amount
 def setBuyAmount():
-    # Defined in 8)
-    global minimum_token_received
     global trading_pair_exist
     global exist_pair_token_to_spend_token_to_buy
     global exist_pair_token_to_spend_native
@@ -558,10 +536,7 @@ def setBuyAmount():
         token_to_buy_price_fiat = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
         print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
-    minimum_token_received = float(buy_amount_ether) * (1 - slippage_percent) #In ether
-
-    print("You will receive ", "{:.5f}".format(buy_amount_ether), token_to_buy_symbol, "(",
-          "{:.5f}".format(minimum_token_received), " at the minimum) for", amount_token_to_spend,
+    print("You will receive ", "{:.5f}".format(buy_amount_ether), token_to_buy_symbol, "for", amount_token_to_spend,
           token_to_spend_symbol)
 
     if  exist_pair_token_to_spend_token_to_buy == True:
@@ -578,22 +553,20 @@ def setBuyAmount():
         print("Chart link token to spend : ", link_spend)
         print("Chart link token to buy : ", link_to_buy)
 
-#9) Send transaction
+#8) Send transaction
 def sendTx():
-    # Defined in 9)
     global nonce
 
     nonce = web3.eth.get_transaction_count(config.sender_address)
     getGasPrice(gas_price_multiplier)
 
     if swap_method_chosen == "1":
-        tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], minimum_token_received, token_to_spend_address
+        tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], token_to_spend_address
                                       , token_to_buy_address, config.sender_address, amount_token_to_spend
                                       , gas_price_final_gwei)
     elif swap_method_chosen == "2":
         if exist_pair_token_to_spend_token_to_buy == True:
-            tx = swapExactTokensForTokens(amount_token_to_spend,minimum_token_received,
-                                         token_to_spend_address,token_to_buy_address,
+            tx = swapExactTokensForTokens(amount_token_to_spend, token_to_spend_address,token_to_buy_address,
                                          config.sender_address,gas_price_final_gwei )
         elif exist_pair_token_to_spend_token_to_buy == False:
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
@@ -601,7 +574,7 @@ def sendTx():
             ending()
     elif swap_method_chosen == "3":
         if exist_pair_token_to_spend_token_to_buy == True:
-            tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],minimum_token_received,token_to_spend_address,
+            tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],token_to_spend_address,
                                          token_to_buy_address,config.sender_address,
                                         amount_token_to_spend,gas_price_final_gwei )
         elif exist_pair_token_to_spend_token_to_buy == False:
@@ -610,7 +583,7 @@ def sendTx():
             ending()
     waitForTxResponse(tx)
 
-
+#9 Ending
 def ending():
     if exist_pair_token_to_spend_token_to_buy == True:
         # cas 1 classique
@@ -649,7 +622,6 @@ def ending():
 def main():
     choice_dex()
     gasPriceChoice()
-    setSlippage()
     choice_swap_method()
     setTokenToSpendParameters()
     choice_amount_to_spend()
