@@ -1,6 +1,9 @@
 # Cake = 0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82 - BsC
 # BUSD = 0xe9e7cea3dedca5984780bafc599bd69add087d56 - BsC
 # USDC = 0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d - BsC
+# Nerve = 0x42F6f551ae042cBe50C739158b4f0CAC0Edb9096 - BsC
+# Pmon = 0x1796ae0b0fa4862485106a0de9b654efe301d0b2 - BsC
+# PRL = 0xd07e82440A395f3F3551b42dA9210CD1Ef4f8B24 - BsC
 
 # Solar = 0x6bD193Ee6D2104F14F94E2cA6efefae561A4334B - Moonriver
 # Moonbeans = 0xc2392dd3e3fed2c8ed9f7f0bdf6026fcd1348453 - Moonriver
@@ -9,6 +12,8 @@
 # USDC.e  = 0xa7d7079b0fead91f3e65f86e8915cb59c1a4c664 - Avalanche
 # MIM = 0x130966628846bfd36ff31a822705796e8cb8c18d - Avalanche
 # Spell = 0xce1bffbd5374dac86a2893119683f4911a2f7814 - Avalanche
+# MYTC = 0x2064bF6e6850F8108d6B96344c29947275161f18 - Avalanche (shitcoin)
+
 
 # Spirit = 0x5Cc61A78F164885776AA610fb0FE1257df78E59B - Fantom
 # Boo = 0x841fad6eae12c286d1fd18d1d525dffa75c7effe - Fantom
