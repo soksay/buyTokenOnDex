@@ -27,12 +27,14 @@ def checkPairExist(contract_factory,token_a,symb_a,token_b, symb_b): #Return boo
 
 
 def waitForTxResponse(tx):
+    global tx_status
     signed_txn = web3.eth.account.sign_transaction(tx, private_key=config.private)
     tx_token = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
     tx_link = dex_chosen["Explorer"].values[0] + "tx/" + web3.toHex(tx_token)
     print("Transaction link : ", tx_link)
     beginning_tx = time.time()
     tx_receipt = web3.eth.wait_for_transaction_receipt(tx_token)
+    print(tx_receipt)
     ending_tx = time.time()
     time_tx = ending_tx - beginning_tx
     print("Time to execute the transaction : ", time_tx, "seconds.")
@@ -97,7 +99,6 @@ def checkApproval(contract_token,token_symbol,router,sender,): # return bool
     print("Checking " + token_symbol + " allowance on router...")
     token_allowance = contract_token.functions.allowance(sender, router).call()
     if token_allowance <= max_approval_check_int:
-        approve(contract_token,token_symbol,router,sender)
         print(token_symbol,"is not approved.")
         return False
     else:
@@ -338,7 +339,7 @@ def gasPriceChoice():
     getGasPrice(gas_price_multiplier)
 
 #3) Set choice swap method
-def choice_swap_method():
+def choiceSwapMethod():
     global swap_method_chosen
     print("Choose your swap method : ")
     print(" - Type 1 if you want to swap exact number of " + native_token_symbol + " for token")
@@ -352,7 +353,7 @@ def choice_swap_method():
         print("You have chosen method " + swap_method_chosen)
     else:
         print("You have to choose between the options proposed. Retry.")
-        choice_swap_method()
+        choiceSwapMethod()
 
 
 #4) Set token to spend parameters depending on swap method chosen
@@ -382,11 +383,16 @@ def setTokenToSpendParameters():
         token_to_spend_decimals = contract_token_to_spend.functions.decimals().call()
         token_to_spend_symbol = contract_token_to_spend.functions.symbol().call()
         token_to_spend_balance_readable = float(token_to_spend_balance) / (10 ** float(token_to_spend_decimals))
-        checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
+
+        token_to_spend_approval = checkApproval(contract_token_to_spend,token_to_spend_symbol,router_address
                                                 ,config.sender_address)
+        if token_to_spend_approval == False:
+            tx = approve(contract_token_to_spend,token_to_spend_symbol,router_address
+                                                ,config.sender_address)
+            waitForTxResponse(tx)
 
 # 5) choose token to spend amount
-def choice_amount_to_spend():
+def choiceAmountToSpend():
     global amount_token_to_spend
     if swap_method_chosen == "3":
         print("/!\ the transaction will be sent directly after this step /!\ ")
@@ -403,20 +409,84 @@ def choice_amount_to_spend():
         if 0 > float(amount_token_to_spend) >= float(token_to_spend_balance_readable):
             print("The value selected must be inferior to : ", token_to_spend_balance_readable, ", nor negative.")
             print("")
-            choice_amount_to_spend()
+            choiceAmountToSpend()
     elif choice_amount_to_spend == "2":
-        percentage = float(input("Select percentage of your token balance you want to sell (between 0.1 to 100):"))\
-                     / 100
-        if 0 < percentage < 1:
-            amount_token_to_spend = float(token_to_spend_balance_readable) * float(percentage)
-        else:
-            print("Please select a correct percentage.")
-            choice_amount_to_spend()
+
+        def selectAmountSpendPercent():
+            global amount_token_to_spend
+            percentage_base_100 = input("Select percentage of your token balance you want to sell (between 0.1 to 100): ")
+            if 0.1 <= float(percentage_base_100) <= 100:
+                percentage = float(percentage_base_100) / 100
+                amount_token_to_spend = float(token_to_spend_balance_readable) * float(percentage)
+                print("You gonna spend :", amount_token_to_spend , token_to_spend_symbol)
+            else:
+                print("Please select a correct percentage.")
+                selectAmountSpendPercent()
+        selectAmountSpendPercent()
 
     else:
         print("Please choose between the option proposed.")
-        choice_amount_to_spend()
+        choiceAmountToSpend()
 
+def setStopLoss():
+    global stop_loss_set
+
+    print("Do you want to set a stop loss ? Type 'yes' or 'no'")
+    stop_loss_choice = input("Type your answer here : ")
+    if stop_loss_choice == "yes":
+        stop_loss_set = True
+
+        def selectStopLoss():
+            global stop_loss_percentage
+            print("At which % of your entry price do you want to selle?")
+            print("(e.g : if you want to set your stop loss at -50% of your entry price, type 50)")
+            stop_loss_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
+            if 0 <= float(stop_loss_percentage_base_100) <= 99.9:
+                stop_loss_percentage = float(stop_loss_percentage_base_100) / float(100)
+                print("Stop loss gonna be set at",stop_loss_percentage_base_100,"% of your entry price.")
+            else:
+                print("Percentage entered should be between 0 and 99.9. Retry")
+                selectStopLoss()
+
+        selectStopLoss()
+
+    elif stop_loss_choice == "no":
+        stop_loss_set = False
+        print("No stop loss gonna be set.")
+
+    else:
+        print("Answer should be 'yes' or 'no'")
+        setStopLoss()
+
+def setTakeProfit():
+    global take_profit_set
+
+    print("Do you want to set a take profit ? Type 'yes' or 'no'")
+    take_profit_choice = input("Type your answer here : ")
+    if take_profit_choice == "yes":
+        take_profit_set = True
+
+        def selectTakeProfit():
+            global take_profit_percentage
+            print("At which % of the entry price do you want to sell ? ")
+            print("(e.g : if you want to set your take profit at +50% of your entry price, type 50)")
+            take_profit_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
+            if 0 < float(take_profit_percentage_base_100):
+                take_profit_percentage = float(take_profit_percentage_base_100) / 100
+                print("Take profit gonna be set at", take_profit_percentage_base_100, "% from your entry price.")
+            else:
+                print("Percentage entered should be superior to 0. Retry")
+                selectTakeProfit()
+
+        selectTakeProfit()
+
+    elif take_profit_choice == "no":
+        take_profit_set = False
+        print("No take profit gonna be set.")
+
+    else:
+        print("Answer should be 'yes' or 'no'")
+        setTakeProfit()
 
 
 # 6) set parameters for token to buy
@@ -426,6 +496,7 @@ def setTokenToBuyParameters():
     global token_to_buy_decimals
     global token_to_buy_symbol
     global token_to_buy_balance_readable
+    global contract_token_to_buy
 
 
     if swap_method_chosen != "3":
@@ -442,9 +513,8 @@ def setTokenToBuyParameters():
     token_to_buy_symbol = contract_token_to_buy.functions.symbol().call()
     token_to_buy_balance_readable = float(token_to_buy_balance) / (10 ** float(token_to_buy_decimals))
 
-# 7) Set buy amount
-def setBuyAmount():
-    global trading_pair_exist
+def checkExistingPairs():
+    global exist_pair_token_to_buy_native
     global exist_pair_token_to_spend_token_to_buy
     global exist_pair_token_to_spend_native
 
@@ -460,77 +530,103 @@ def setBuyAmount():
                                                             token_to_buy_address, token_to_buy_symbol,
                                                             token_to_spend_address, token_to_spend_symbol)
 
+# 7) Set buy amount
+def getTokenPrices():
+    global trading_pair_exist
+    global token_to_buy_price_fiat
+    global token_to_spend_price_fiat
+
     getNativeTokenPrice(exist_pair_native_stable) #On actualise les données de prix du token
 
     if token_to_spend_address != native_token_address:
+        #Token to spend is not the native token
         if exist_pair_token_to_spend_native == True and exist_pair_token_to_spend_token_to_buy == True :
             # Get token price A and B given A
-            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                                   amount_token_spend=amount_token_to_spend,
-                                                   decimals=token_to_spend_decimals,
-                                                   token_to_spend=token_to_spend_address,
-                                                   token_to_buy=native_token_address)
-            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                      amount_token_spend=amount_token_to_spend,
-                                      decimals=token_to_spend_decimals,
-                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
-            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
-            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+            def getTokensPriceFromTokenA():
+                global buy_amount_ether
+                global token_to_spend_price_fiat
+                global token_to_buy_price_fiat
+                buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                                       amount_token_spend=amount_token_to_spend,
+                                                       decimals=token_to_spend_decimals,
+                                                       token_to_spend=token_to_spend_address,
+                                                       token_to_buy=native_token_address)
+                buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                          amount_token_spend=amount_token_to_spend,
+                                          decimals=token_to_spend_decimals,
+                                          token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
+                buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+                buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
 
-            token_to_spend_price_fiat = (float(buy_amount_native_token_ether) /float(amount_token_to_spend)) * \
-                                        float(native_token_price_readable)
-            token_to_buy_price_fiat = (float(amount_token_to_spend) / float(buy_amount_ether)) * \
-                                      float(token_to_spend_price_fiat)
+                token_to_spend_price_fiat = (float(buy_amount_native_token_ether) /float(amount_token_to_spend)) * \
+                                            float(native_token_price_readable)
+                token_to_buy_price_fiat = (float(amount_token_to_spend) / float(buy_amount_ether)) * \
+                                          float(token_to_spend_price_fiat)
 
-            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+            getTokensPriceFromTokenA()
 
         elif  exist_pair_token_to_buy_native == True and exist_pair_token_to_spend_token_to_buy == True :
             # Get token price A and B given B
-            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                      amount_token_spend=amount_token_to_spend,
-                                      decimals=token_to_spend_decimals,
-                                      token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
-            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                               amount_token_spend=returnEtherValue(buy_amount[1], token_to_buy_decimals),
-                                               decimals=token_to_buy_decimals,
-                                               token_to_spend=token_to_buy_address,
-                                               token_to_buy=native_token_address)
-            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+            def getTokensPriceFromTokenB():
+                global buy_amount_ether
+                global token_to_spend_price_fiat
+                global token_to_buy_price_fiat
 
-            token_to_buy_price_fiat = (float(buy_amount_native_token_ether) / float(buy_amount_ether)) * \
-                                      float(native_token_price_readable)
-
-            token_to_spend_price_fiat = (float(buy_amount_ether) / float(amount_token_to_spend)) * \
-                                        float(token_to_buy_price_fiat)
-
-            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
-
-
-        elif exist_pair_token_to_spend_token_to_buy == False :
-        #Case where token to buy and token to spend don't have a LP
-            buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                                   amount_token_spend=amount_token_to_spend,
-                                                   decimals=token_to_spend_decimals,
-                                                   token_to_spend=token_to_spend_address,
+                buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                          amount_token_spend=amount_token_to_spend,
+                                          decimals=token_to_spend_decimals,
+                                          token_to_spend=token_to_spend_address, token_to_buy=token_to_buy_address)
+                buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                                   amount_token_spend=returnEtherValue(buy_amount[1], token_to_buy_decimals),
+                                                   decimals=token_to_buy_decimals,
+                                                   token_to_spend=token_to_buy_address,
                                                    token_to_buy=native_token_address)
-            # Amount in native blockchain token converted to token we want to spend
-            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                      amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
-                                      decimals=native_token_decimals,
-                                      token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
+                buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+                buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
 
-            buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
-            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-            token_to_spend_price_fiat = (float(buy_amount_native_token_ether) * float(
-                native_token_price_readable)) / float(amount_token_to_spend)
-            token_to_buy_price_fiat = (float(buy_amount_native_token_ether) * float(
-                native_token_price_readable)) / float(buy_amount_ether)
+                token_to_buy_price_fiat = (float(buy_amount_native_token_ether) / float(buy_amount_ether)) * \
+                                          float(native_token_price_readable)
 
-            print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+                token_to_spend_price_fiat = (float(buy_amount_ether) / float(amount_token_to_spend)) * \
+                                            float(token_to_buy_price_fiat)
+
+                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+            getTokensPriceFromTokenB()
+
+
+        elif exist_pair_token_to_spend_token_to_buy == False and  exist_pair_token_to_buy_native == True and  exist_pair_token_to_spend_native == True :
+            # Case when token to buy and token to spend don't have a LP but both of them have a pair with native token
+            def getTokensPriceFromNative():
+                global buy_amount_ether
+                global token_to_spend_price_fiat
+                global token_to_buy_price_fiat
+                buy_amount_native_token = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                                       amount_token_spend=amount_token_to_spend,
+                                                       decimals=token_to_spend_decimals,
+                                                       token_to_spend=token_to_spend_address,
+                                                       token_to_buy=native_token_address)
+                # Amount in native blockchain token converted to token we want to spend
+                buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                          amount_token_spend=web3.fromWei(buy_amount_native_token[1], "ether"),
+                                          decimals=native_token_decimals,
+                                          token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
+
+                buy_amount_native_token_ether = returnEtherValue(buy_amount_native_token[1], native_token_decimals)
+                buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+                token_to_spend_price_fiat = (float(buy_amount_native_token_ether) * float(
+                    native_token_price_readable)) / float(amount_token_to_spend)
+                token_to_buy_price_fiat = (float(buy_amount_native_token_ether) * float(
+                    native_token_price_readable)) / float(buy_amount_ether)
+
+                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
+                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+            getTokensPriceFromNative()
 
         else:
             print("There is no liquidity pair at all between the tokens you want to swap")
@@ -538,17 +634,36 @@ def setBuyAmount():
             exit()
 
     else:
-        #Token to spend est natif
-        buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
-                                  amount_token_spend=amount_token_to_spend,
-                                  decimals=native_token_decimals,
-                                  token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
-        buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
-        token_to_buy_price_fiat = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
-        print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+        #Token to spend is native
+        def getTokenPriceFromNative():
+            global buy_amount_ether
+            global token_to_spend_price_fiat
+            global token_to_buy_price_fiat
 
+            buy_amount = getAmountOut(dex=dex_chosen["Dex"].values[0],
+                                      amount_token_spend=amount_token_to_spend,
+                                      decimals=native_token_decimals,
+                                      token_to_spend=native_token_address, token_to_buy=token_to_buy_address)
+            buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
+            token_to_spend_price_fiat = float(native_token_price_readable)
+            token_to_buy_price_fiat = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
+            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
+
+        getTokenPriceFromNative()
+
+def tradePreview():
+    global stop_loss_value
+    global take_profit_value
     print("You will receive ", "{:.5f}".format(buy_amount_ether), token_to_buy_symbol, "for", amount_token_to_spend,
           token_to_spend_symbol)
+    print("Your fiat entry  price on",token_to_buy_symbol,"is :",token_to_buy_price_fiat)
+
+    if stop_loss_set == True:
+        stop_loss_value = float(token_to_buy_price_fiat) * (1 - float(stop_loss_percentage))
+        print("Stop loss is set at : ", stop_loss_value)
+    if take_profit_set == True:
+        take_profit_value = float(token_to_buy_price_fiat) * (1 + float(take_profit_percentage))
+        print("Take profit is set at : ", take_profit_value)
 
     if  exist_pair_token_to_spend_token_to_buy == True:
         pair = contract_factory.functions.getPair(token_to_buy_address, token_to_spend_address).call()
@@ -564,21 +679,105 @@ def setBuyAmount():
         print("Chart link token to spend : ", link_spend)
         print("Chart link token to buy : ", link_to_buy)
 
+def sendTxReturn():
+    global nonce
+    global condition
+
+    amount_token_to_buy_received_readable = float(amount_token_to_buy_received) / (10 ** float(token_to_buy_decimals))
+
+    nonce = web3.eth.get_transaction_count(config.sender_address)
+    getGasPrice(gas_price_multiplier)
+    if swap_method_chosen == "1":
+        tx = swapExactTokensForNative(dex_chosen["Dex"].values[0], token_to_buy_address,
+                                      token_to_spend_address, config.sender_address,
+                                      amount_token_to_buy_received_readable, gas_price_final_gwei, token_to_buy_decimals)
+
+    elif swap_method_chosen == "2":
+        tx = swapExactTokensForTokens(amount_token_to_buy_received_readable,token_to_buy_address, token_to_spend_address,
+                                      config.sender_address, gas_price_final_gwei,token_to_buy_decimals)
+
+    elif swap_method_chosen == "3":
+        tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], token_to_buy_address,
+                                      token_to_spend_address, config.sender_address,
+                                      amount_token_to_buy_received_readable, gas_price_final_gwei, token_to_buy_decimals)
+    waitForTxResponse(tx)
+
+
+def activateStopLossAndTakeProfit():
+    getTokenPrices()
+    condition = False
+    while condition == False:
+        getTokenPrices()
+        if stop_loss_set == True and take_profit_set == True:
+            if token_to_buy_price_fiat <= stop_loss_value or token_to_buy_price_fiat >= take_profit_value:
+                if token_to_buy_price_fiat <= stop_loss_value:
+                    print("Stop loss activated.")
+                if token_to_buy_price_fiat >= take_profit_value:
+                    print("Take profit activated.")
+                sendTxReturn()
+                ending()
+        elif stop_loss_set == True and take_profit_set == False:
+            if token_to_buy_price_fiat <= stop_loss_value:
+                print("Stop loss activated.")
+                sendTxReturn()
+                ending()
+        elif stop_loss_set == False and take_profit_set == True:
+            if token_to_buy_price_fiat >= take_profit_value:
+                print("Take profit activated.")
+                sendTxReturn()
+                ending()
+        time.sleep(1)
+
 #8) Send transaction
 def sendTx():
     global nonce
+    global amount_token_to_buy_received
 
     nonce = web3.eth.get_transaction_count(config.sender_address)
     getGasPrice(gas_price_multiplier)
 
     if swap_method_chosen == "1":
+        amount_token_to_buy_before_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
         tx = swapExactNativeForTokens(dex_chosen["Dex"].values[0], token_to_spend_address
                                       , token_to_buy_address, config.sender_address, amount_token_to_spend
                                       , gas_price_final_gwei, token_to_spend_decimals)
+        waitForTxResponse(tx)
+        amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+        amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
+        if tx_status == "sent":
+            if stop_loss_set == True or take_profit_set == True:
+                token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
+                                                        , config.sender_address)
+                if token_to_buy_approval == False:
+                    tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
+                                 , config.sender_address)
+                    waitForTxResponse(tx)
+                activateStopLossAndTakeProfit()
+        else:
+            print("Stop loss / Take profit not activated because transaction is not sent")
+            ending()
+
     elif swap_method_chosen == "2":
         if exist_pair_token_to_spend_token_to_buy == True:
+            amount_token_to_buy_before_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
             tx = swapExactTokensForTokens(amount_token_to_spend, token_to_spend_address,token_to_buy_address,
                                              config.sender_address,gas_price_final_gwei, token_to_spend_decimals)
+            waitForTxResponse(tx)
+            amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+            amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
+            if stop_loss_set == True or take_profit_set == True:
+                if tx_status == "sent":
+                    token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
+                                                          , config.sender_address)
+                    if token_to_buy_approval == False:
+                        tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
+                                     , config.sender_address)
+                        waitForTxResponse(tx)
+                    activateStopLossAndTakeProfit()
+                else:
+                    print("Stop loss / Take profit not activated because transaction is not sent")
+                    ending()
+
         elif exist_pair_token_to_spend_token_to_buy == False:
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
                   token_to_buy_symbol + " doesn't exist")
@@ -586,14 +785,30 @@ def sendTx():
 
     elif swap_method_chosen == "3":
         if exist_pair_token_to_spend_token_to_buy == True:
+            amount_token_to_buy_before_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
             tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],token_to_spend_address,
                                          token_to_buy_address,config.sender_address,
                                         amount_token_to_spend,gas_price_final_gwei , token_to_spend_decimals)
+            waitForTxResponse(tx)
+            amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+            amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
+            if stop_loss_set == True or take_profit_set == True:
+                if tx_status == "sent":
+                    token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
+                                                          , config.sender_address)
+                    if token_to_buy_approval == False:
+                        tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
+                                     , config.sender_address)
+                        waitForTxResponse(tx)
+                    activateStopLossAndTakeProfit(amount_token_to_buy_received)
+                else:
+                    print("Stop loss / Take profit not activated because transaction is not sent")
+                    ending()
+
         elif exist_pair_token_to_spend_token_to_buy == False:
             print("Transaction cannot be sent because trading pair between " + token_to_spend_symbol + " and " +
                   token_to_buy_symbol + " doesn't exist")
             ending()
-    waitForTxResponse(tx)
 
 #9 Ending
 def ending():
@@ -631,14 +846,19 @@ def ending():
                 "End of the script, send donations if you feel like it : 0xf444955E4dC892198E8a733ffCf08aaA13Bea096 :) ")
             exit()
 
+
 def main():
     choice_dex()
     gasPriceChoice()
-    choice_swap_method()
+    choiceSwapMethod()
     setTokenToSpendParameters()
-    choice_amount_to_spend()
+    choiceAmountToSpend()
+    setStopLoss()
+    setTakeProfit()
     setTokenToBuyParameters()
-    setBuyAmount()
+    checkExistingPairs()
+    getTokenPrices()
+    tradePreview()
     sendTx()
     ending()
 
