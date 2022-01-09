@@ -34,7 +34,6 @@ def waitForTxResponse(tx):
     print("Transaction link : ", tx_link)
     beginning_tx = time.time()
     tx_receipt = web3.eth.wait_for_transaction_receipt(tx_token)
-    print(tx_receipt)
     ending_tx = time.time()
     time_tx = ending_tx - beginning_tx
     print("Time to execute the transaction : ", time_tx, "seconds.")
