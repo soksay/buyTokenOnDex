@@ -1,6 +1,7 @@
 import pandas as pd
 from web3 import Web3
 import config
+import const
 import time
 import datetime
 
@@ -16,14 +17,12 @@ def checkPairExist(contract_factory,token_a,symb_a,token_b, symb_b): #Return boo
     symb_a = symb_a
     symb_b = symb_b
 
-    print("Checking existence of token pair on factory :", symb_a ,"/", symb_b)
     pair = contract_factory.functions.getPair(token_a, token_b).call()
     if pair == "0x0000000000000000000000000000000000000000":
         bool = False
-        print("Pair doesn't exist")
     else:
         bool = True
-        print("Pair exist")
+    print(f"Timestamp {datetime.datetime.now()} Checking existence of token pair on factory :{symb_a}/{symb_b} : {bool}")
     return bool
 
 
@@ -127,10 +126,8 @@ def getNativeTokenPrice(pair_exist):
                                           token_to_spend=native_token_address, token_to_buy=stable_coin_token_address)
 
         native_token_price_readable = float(native_token_price[1]) / (10 ** float(stable_coin_decimals))
-        print("Timestamp : ", datetime.datetime.now(),"- the price for 1", native_token_symbol, "is",
-              native_token_price_readable, stable_coin_symbol)
     else:
-        print("There's not trading pair between " + native_token_symbol + "and" + stable_coin_symbol)
+        print("There is no trading pair between " + native_token_symbol + "and" + stable_coin_symbol)
         print("Something is wrong please check and retry.")
         exit()
 
@@ -163,7 +160,20 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
-
+    elif dex == "netswap":
+        tx = contract_router.functions.swapExactMetisForTokens(
+            0, # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'value': amount_to_spend,
+            # This is the token BNB amount you want to swap from
+            'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
     else:
         tx = contract_router.functions.swapExactETHForTokens(
             0, # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
@@ -174,7 +184,7 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             'from': config.sender_address,
             'value': amount_to_spend,
             # This is the token BNB amount you want to swap from
-            # 'gas': 1000000,
+            'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -186,6 +196,20 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_spe
 
     if dex == "traderjoe":
         tx = contract_router.functions.swapExactTokensForAVAX(
+            amount_to_spend,
+            0,
+            # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
+            [token_spend, token_buy],
+            sender_address,
+            (int(time.time()) + 10000)
+        ).buildTransaction({
+            'from': config.sender_address,
+            'gas': 1000000,
+            'gasPrice': web3.toWei(gas_price, 'gwei'),
+            'nonce': nonce
+        })
+    elif dex == "netswap":
+        tx = contract_router.functions.swapExactTokensForMetis(
             amount_to_spend,
             0,
             # set to 0 or specify the minimum amount of tokens you want to receive -- consider decimals
@@ -235,6 +259,53 @@ def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_p
     })
     return tx
 
+def getPairLiquidity(token_a,token_b,contract_factory,asset_to_scan, amount_asset_to_scan):
+    global token0_symbol
+    global token1_symbol
+    global pair
+    global token0_symbol
+    global reserve_token0_readable
+    global token1_symbol
+    global reserve_token1_readable
+
+    pair = web3.toChecksumAddress(contract_factory.functions.getPair(token_a,token_b).call())
+
+    pair_contract = web3.eth.contract(address = pair, abi = const.lp_abi )
+    token0_address = web3.toChecksumAddress(pair_contract.functions.token0().call())
+    token1_address = web3.toChecksumAddress(pair_contract.functions.token1().call())
+
+    token0_contract = web3.eth.contract(address = token0_address , abi =const.erc20_abi)
+    token1_contract = web3.eth.contract(address= token1_address, abi=const.erc20_abi)
+
+    token0_symbol = token0_contract.functions.symbol().call()
+    token1_symbol = token1_contract.functions.symbol().call()
+
+    token0_decimals = token0_contract.functions.decimals().call()
+    token1_decimals = token1_contract.functions.decimals().call()
+
+    pair_reserve = pair_contract.functions.getReserves().call()
+
+    reserve_token_0 = pair_reserve[0]
+    reserve_token_1 = pair_reserve[1]
+
+    reserve_token0_readable = float(reserve_token_0) / 10 ** float(token0_decimals)
+    reserve_token1_readable = float(reserve_token_1) / 10 ** float(token1_decimals)
+
+    if asset_to_scan == token0_symbol:
+        reserve_token_to_scan = reserve_token_0
+        #reserve_token_to_scan_readable = reserve_token0_readable
+        amount_asset_to_scan = int(amount_asset_to_scan * (10 ** token0_decimals))
+    elif asset_to_scan == token1_symbol:
+        reserve_token_to_scan = reserve_token_1
+        #reserve_token_to_scan_readable = reserve_token1_readable
+        amount_asset_to_scan = int(amount_asset_to_scan * (10 ** token1_decimals))
+
+    if reserve_token_to_scan <= amount_asset_to_scan:
+        return False
+    else:
+        return True
+
+
 """
 End utility functions 
 """
@@ -249,6 +320,7 @@ def choice_dex():
     global contract_factory
 
     global web3
+    global contract
     global native_token_address
     global native_token_name
     global native_token_symbol
@@ -321,6 +393,8 @@ def choice_dex():
         exist_pair_native_stable = checkPairExist(contract_factory, native_token_address, native_token_symbol,
                                                   stable_coin_token_address, stable_coin_symbol)
         getNativeTokenPrice(exist_pair_native_stable)
+        print("Timestamp : ", datetime.datetime.now(), "- the price for 1", native_token_symbol, "is",
+              native_token_price_readable, stable_coin_symbol)
 
         print("You have chosen DEX : ", dex_chosen["Dex"].values[0])
 
@@ -391,11 +465,30 @@ def setTokenToSpendParameters():
                                                 ,config.sender_address)
             waitForTxResponse(tx)
 
+def choiceScanLiquidityAdded():
+    global choice_scan_liq
+    choice_scan_liq = ""
+    print("Do you want to buy only if liquidity is added ? ")
+    choice_scan_liq = input("Type yes or no : ")
+    if choice_scan_liq.lower() != "yes" and choice_scan_liq.lower() != "no":
+        print("Choice might be yes or no")
+        choiceScanLiquidityAdded()
+
+def choiceStopPrice():
+    global choice_stop_price
+    choice_stop_price = ""
+    print("Do you want to set a stop price on your swap")
+    choice_stop_price = input("Type yes or no : ")
+    if choice_stop_price.lower() != "yes" and choice_stop_price.lower() != "no":
+        print("Choice might be yes or no")
+        choiceStopPrice()
+
+
 # 5) choose token to spend amount
 def choiceAmountToSpend():
     global amount_token_to_spend
-    if swap_method_chosen == "3":
-        print("/!\ the transaction will be sent directly after this step /!\ ")
+    if swap_method_chosen == "3" and choice_stop_price.lower() == "no":
+        print("/!\ the script will run directly after this step /!\ ")
 
     print("You have ", "{:.18f}".format(token_to_spend_balance_readable) , " ", token_to_spend_symbol, " in your wallet")
     print("How many", token_to_spend_symbol, "do you want to spend ?")
@@ -438,7 +531,7 @@ def setStopLoss():
 
         def selectStopLoss():
             global stop_loss_percentage
-            print("At which % of your entry price do you want to selle?")
+            print("At which % of your entry price do you want to set your stop loss?")
             print("(e.g : if you want to set your stop loss at -50% of your entry price, type 50)")
             stop_loss_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
             if 0 <= float(stop_loss_percentage_base_100) <= 99.9:
@@ -468,7 +561,7 @@ def setTakeProfit():
 
         def selectTakeProfit():
             global take_profit_percentage
-            print("At which % of the entry price do you want to sell ? ")
+            print("At which % of the entry price do you want to set your take profit")
             print("(e.g : if you want to set your take profit at +50% of your entry price, type 50)")
             take_profit_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
             if 0 < float(take_profit_percentage_base_100):
@@ -488,7 +581,6 @@ def setTakeProfit():
         print("Answer should be 'yes' or 'no'")
         setTakeProfit()
 
-
 # 6) set parameters for token to buy
 def setTokenToBuyParameters():
     global token_to_buy_address
@@ -499,19 +591,47 @@ def setTokenToBuyParameters():
     global contract_token_to_buy
 
 
-    if swap_method_chosen != "3":
-        print("/!\ the transaction will be sent directly after this step /!\ ")
+    if swap_method_chosen != "3" :
+        if choice_stop_price.lower() == "no":
+            print("/!\ the script will run directly after this step /!\ ")
         token_to_buy_address = chooseToken(method="buy")
         token_to_buy_abi = '[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"value","type":"uint256"}],"name":"burn","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}]'
-    else:
+        contract_token_to_buy = web3.eth.contract(token_to_buy_address, abi=token_to_buy_abi)
+        token_to_buy_balance = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+        token_to_buy_decimals = contract_token_to_buy.functions.decimals().call()
+        token_to_buy_symbol = contract_token_to_buy.functions.symbol().call()
+        token_to_buy_balance_readable = float(token_to_buy_balance) / (10 ** float(token_to_buy_decimals))
+    elif swap_method_chosen == "3":
         token_to_buy_address = native_token_address
         token_to_buy_abi = native_token_abi
+        contract_token_to_buy = contract
+        token_to_buy_decimals = native_token_decimals
+        token_to_buy_balance = native_token_balance
+        token_to_buy_symbol = native_token_symbol
+        token_to_buy_balance_readable =native_token_balance_readable
 
-    contract_token_to_buy = web3.eth.contract(token_to_buy_address, abi=token_to_buy_abi)
-    token_to_buy_balance = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
-    token_to_buy_decimals = contract_token_to_buy.functions.decimals().call()
-    token_to_buy_symbol = contract_token_to_buy.functions.symbol().call()
-    token_to_buy_balance_readable = float(token_to_buy_balance) / (10 ** float(token_to_buy_decimals))
+
+
+def setStopPrice():
+    global token_to_stop_symbol
+    global token_to_stop_price
+    if choice_stop_price.lower() == "yes":
+
+        print(f"On which asset do you want to set a stop price : {token_to_spend_symbol} or {token_to_buy_symbol}")
+        token_to_stop_symbol = input(f"Type your choice here : ").upper()
+        if token_to_stop_symbol.lower() == token_to_spend_symbol.lower()\
+                or token_to_stop_symbol.lower() == token_to_buy_symbol.lower():
+            print("/!\ the script will run directly after this step /!\ ")
+            token_to_stop_price = float(input(f"Type the stop price (in $) of {token_to_stop_symbol} : "))
+            if token_to_stop_price <= 0:
+                print("Stop price must be > 0")
+                setStopPrice()
+        else:
+            print(f"You have to choose between {token_to_spend_symbol} or {token_to_buy_symbol}")
+            setStopPrice()
+
+
+
 
 def checkExistingPairs():
     global exist_pair_token_to_buy_native
@@ -529,6 +649,65 @@ def checkExistingPairs():
     exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
                                                             token_to_buy_address, token_to_buy_symbol,
                                                             token_to_spend_address, token_to_spend_symbol)
+
+
+def scanLiquidity():
+    if choice_scan_liq.lower() == "yes":
+        asset_scan_liq = input(f"Select the asset that must be scanned between {token_to_spend_symbol} "
+                               f"and {token_to_buy_symbol} : ")
+        if asset_scan_liq == token_to_spend_symbol or asset_scan_liq == token_to_buy_symbol:
+            amount_asset_scan_liq = float(input(f"Type the amount of {asset_scan_liq}"
+                                                f" that must be added in the liquidity pool : "))
+            if amount_asset_scan_liq < 0:
+                print(f"Please select an amount > 0")
+                scanLiquidity()
+        else:
+            print(f"Please select between {token_to_spend_symbol} or {token_to_buy_symbol}")
+            scanLiquidity()
+
+        exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
+                                                               token_to_buy_address, token_to_buy_symbol,
+                                                               token_to_spend_address, token_to_spend_symbol)
+        while exist_pair_token_to_spend_token_to_buy == False:
+            exist_pair_token_to_spend_token_to_buy = checkPairExist(contract_factory,
+                                                                    token_to_buy_address, token_to_buy_symbol,
+                                                                    token_to_spend_address, token_to_spend_symbol)
+
+        if exist_pair_token_to_spend_token_to_buy == True:
+            pair_liquidity = getPairLiquidity(token_a=token_to_spend_address,
+                                              token_b=token_to_buy_address,
+                                              contract_factory=contract_factory,
+                                              asset_to_scan = asset_scan_liq,
+                                              amount_asset_to_scan =amount_asset_scan_liq )
+
+            print(f'Timestamp : ≈ {datetime.datetime.now()} - pair {token0_symbol} / {token1_symbol}'
+                  f'Token pair : {pair}'
+                  f'Reserve {token0_symbol} : {reserve_token0_readable}'
+                  f'Reserve {token1_symbol} : {reserve_token1_readable}')
+
+            last_reserve_0 = reserve_token0_readable
+            last_reserve_1 = reserve_token1_readable
+            while pair_liquidity == False:
+                pair_liquidity = getPairLiquidity(token_a=token_to_spend_address,
+                                              token_b=token_to_buy_address,
+                                              contract_factory=contract_factory,
+                                              asset_to_scan = asset_scan_liq,
+                                              amount_asset_to_scan = amount_asset_scan_liq)
+                if last_reserve_0 != reserve_token0_readable and last_reserve_1 !=reserve_token1_readable:
+                    print(f'Timestamp : ≈ {datetime.datetime.now()} - pair {token0_symbol} / {token1_symbol}'
+                          f'Token pair : {pair}'
+                          f'Reserve {token0_symbol} : {reserve_token0_readable}'
+                          f'Reserve {token1_symbol} : {reserve_token1_readable}')
+
+                if pair_liquidity == True:
+                    print(f"Timestamp {datetime.datetime.now()} - "
+                          f"{asset_scan_liq} liquidity is equal or above {amount_asset_scan_liq}")
+
+                last_reserve_0 = reserve_token0_readable
+                last_reserve_1 = reserve_token1_readable
+
+
+
 
 # 7) Set buy amount
 def getTokenPrices():
@@ -563,8 +742,6 @@ def getTokenPrices():
                 token_to_buy_price_fiat = (float(amount_token_to_spend) / float(buy_amount_ether)) * \
                                           float(token_to_spend_price_fiat)
 
-                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
             getTokensPriceFromTokenA()
 
@@ -593,8 +770,6 @@ def getTokenPrices():
                 token_to_spend_price_fiat = (float(buy_amount_ether) / float(amount_token_to_spend)) * \
                                             float(token_to_buy_price_fiat)
 
-                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
             getTokensPriceFromTokenB()
 
@@ -623,15 +798,12 @@ def getTokenPrices():
                 token_to_buy_price_fiat = (float(buy_amount_native_token_ether) * float(
                     native_token_price_readable)) / float(buy_amount_ether)
 
-                print("token_to_spend_price_fiat : ", token_to_spend_price_fiat)
-                print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
-
             getTokensPriceFromNative()
 
         else:
             print("There is no liquidity pair at all between the tokens you want to swap")
             print("Impossible to fetch price")
-            exit()
+            ending()
 
     else:
         #Token to spend is native
@@ -647,13 +819,71 @@ def getTokenPrices():
             buy_amount_ether = returnEtherValue(buy_amount[1], token_to_buy_decimals)
             token_to_spend_price_fiat = float(native_token_price_readable)
             token_to_buy_price_fiat = (float(native_token_price_readable) * float(amount_token_to_spend)) / float(buy_amount_ether)
-            print("token_to_buy_price_fiat : ", token_to_buy_price_fiat)
 
         getTokenPriceFromNative()
+
+def stopPrice():
+    if choice_stop_price.lower() == "yes" and exist_pair_token_to_spend_token_to_buy == True:
+        if exist_pair_token_to_spend_token_to_buy == True:
+            # We initiate the while loop that is coming after
+            getTokenPrices()
+            if token_to_stop_symbol == token_to_spend_symbol.upper():
+                token_to_stop_price_fiat = token_to_spend_price_fiat  # token to spend price FIAT
+            elif token_to_stop_symbol == token_to_buy_symbol.upper() :
+                token_to_stop_price_fiat = token_to_buy_price_fiat  # token to buy price FIAT
+
+            if token_to_stop_price < token_to_stop_price_fiat:
+                print(f"Timestamp : {datetime.datetime.now()} - "
+                      f"When {token_to_spend_symbol} price drop below {token_to_stop_price} $"
+                      f" current price is {token_to_stop_price_fiat}$")
+                stop_side = "below"
+            elif token_to_stop_price > token_to_stop_price_fiat:
+                print(f"Setting stop on {token_to_stop_symbol} when price is above {token_to_stop_price}"
+                      f" current price is {token_to_stop_price_fiat}$")
+                stop_side = "above"
+            else:
+                print("The stop price that you have set is already equal to the current token price")
+                ending()
+
+            # initiate condition for while loop
+            condition = False
+            token_to_stop_price_fiat_last = 0
+            while condition == False:
+
+                getTokenPrices()
+                if token_to_stop_symbol == token_to_spend_symbol.upper():
+                    token_to_stop_price_fiat = token_to_spend_price_fiat  # token to spend price FIAT
+                elif token_to_stop_symbol == token_to_buy_symbol.upper():
+                    token_to_stop_price_fiat = token_to_buy_price_fiat  # token to buy price FIAT
+
+                if stop_side == "below":
+                    delta = (1 - (token_to_stop_price / token_to_stop_price_fiat)) * 100
+                if stop_side == "above":
+                    delta = ((token_to_stop_price / token_to_stop_price_fiat) - 1) * 100
+
+                delta_formatted = f"{delta:.2f}"
+                if token_to_stop_price_fiat_last != token_to_stop_price_fiat:
+                    print(f"Timestamp {datetime.datetime.now()} - Current price of {token_to_stop_symbol} "
+                          f"is {token_to_stop_price_fiat} $ - {delta_formatted}% before swap is executed")
+
+
+                if stop_side == "below" and token_to_stop_price_fiat <= token_to_stop_price:
+                    print(f"The price is below {token_to_stop_price_fiat}, swap engaged")
+                    condition = True
+
+                elif stop_side == "above" and token_to_spend_price_fiat >= token_to_stop_price_fiat:
+                    print(f"The price is above {token_to_stop_price_fiat}, swap engaged")
+                    condition = True
+                token_to_stop_price_fiat_last = token_to_stop_price_fiat
+
 
 def tradePreview():
     global stop_loss_value
     global take_profit_value
+
+    print(f"FIAT price of {token_to_spend_symbol}  : {token_to_spend_price_fiat}")
+    print(f"FIAT price of {token_to_buy_symbol} : {token_to_buy_price_fiat}")
+
     print("You will receive ", "{:.5f}".format(buy_amount_ether), token_to_buy_symbol, "for", amount_token_to_spend,
           token_to_spend_symbol)
     print("Your fiat entry  price on",token_to_buy_symbol,"is :",token_to_buy_price_fiat)
@@ -704,11 +934,25 @@ def sendTxReturn():
 
 
 def activateStopLossAndTakeProfit():
-    getTokenPrices()
     condition = False
+    token_to_buy_price_fiat_last = 0
     while condition == False:
         getTokenPrices()
         if stop_loss_set == True and take_profit_set == True:
+            delta_stop_loss = (1 - (stop_loss_value / token_to_buy_price_fiat)) * 100
+            delta_take_profit = ((take_profit_value / token_to_buy_price_fiat) - 1) * 100
+
+            delta_stop_loss_formatted = f"{delta_stop_loss:.2f}"
+            delta_take_profit_formatted = f"{delta_take_profit:.2f}"
+
+            if token_to_buy_price_fiat_last != token_to_buy_price_fiat:
+                print(
+                    f"Timestamp {datetime.datetime.now()} - "
+                    f" FIAT price of {token_to_buy_symbol} is {token_to_buy_price_fiat} $ - "
+                    f" {delta_stop_loss_formatted}% from current price to stop loss - "
+                    f" {delta_take_profit_formatted}% from current price to take profit"
+                )
+
             if token_to_buy_price_fiat <= stop_loss_value or token_to_buy_price_fiat >= take_profit_value:
                 if token_to_buy_price_fiat <= stop_loss_value:
                     print("Stop loss activated.")
@@ -716,17 +960,38 @@ def activateStopLossAndTakeProfit():
                     print("Take profit activated.")
                 sendTxReturn()
                 ending()
+
         elif stop_loss_set == True and take_profit_set == False:
+            delta_stop_loss = (1 - (stop_loss_value / token_to_buy_price_fiat)) * 100
+
+            delta_stop_loss_formatted = f"{delta_stop_loss:.2f}"
+
+            if token_to_buy_price_fiat_last != token_to_buy_price_fiat:
+                print(
+                    f"Timestamp {datetime.datetime.now()} - "
+                    f" FIAT price of {token_to_buy_symbol} is {token_to_buy_price_fiat} $ - "
+                    f" {delta_stop_loss_formatted}% from current price to stop loss"
+                )
             if token_to_buy_price_fiat <= stop_loss_value:
                 print("Stop loss activated.")
                 sendTxReturn()
                 ending()
+
         elif stop_loss_set == False and take_profit_set == True:
+            delta_take_profit = ((take_profit_value / token_to_buy_price_fiat) - 1) * 100
+            delta_take_profit_formatted = f"{delta_take_profit:.2f}"
+
+            if token_to_buy_price_fiat_last != token_to_buy_price_fiat:
+                print(
+                    f"Timestamp {datetime.datetime.now()} - "
+                    f" FIAT price of {token_to_buy_symbol} is {token_to_buy_price_fiat} $ - "
+                    f" {delta_take_profit_formatted}% from current price to take profit"
+                )
             if token_to_buy_price_fiat >= take_profit_value:
                 print("Take profit activated.")
                 sendTxReturn()
                 ending()
-        time.sleep(1)
+        token_to_buy_price_fiat_last = token_to_buy_price_fiat
 
 #8) Send transaction
 def sendTx():
@@ -742,7 +1007,15 @@ def sendTx():
                                       , token_to_buy_address, config.sender_address, amount_token_to_spend
                                       , gas_price_final_gwei, token_to_spend_decimals)
         waitForTxResponse(tx)
-        amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+
+        check_balance = False
+        while check_balance == False:
+            amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+            if (amount_token_to_buy_after_tx - amount_token_to_buy_before_tx) != 0:
+                amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+                print(f"Timestamp {datetime.datetime.now()} - Balance updated")
+                check_balance = True
+
         amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
         if tx_status == "sent":
             if stop_loss_set == True or take_profit_set == True:
@@ -763,7 +1036,15 @@ def sendTx():
             tx = swapExactTokensForTokens(amount_token_to_spend, token_to_spend_address,token_to_buy_address,
                                              config.sender_address,gas_price_final_gwei, token_to_spend_decimals)
             waitForTxResponse(tx)
-            amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+
+            check_balance = False
+            while check_balance == False:
+                amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+                if (amount_token_to_buy_after_tx - amount_token_to_buy_before_tx) != 0:
+                    amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+                    print(f"Timestamp {datetime.datetime.now()} - Balance updated")
+                    check_balance = True
+
             amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
             if stop_loss_set == True or take_profit_set == True:
                 if tx_status == "sent":
@@ -785,13 +1066,22 @@ def sendTx():
 
     elif swap_method_chosen == "3":
         if exist_pair_token_to_spend_token_to_buy == True:
-            amount_token_to_buy_before_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+            amount_token_to_buy_before_tx = web3.eth.get_balance(config.sender_address)
             tx = swapExactTokensForNative(dex_chosen["Dex"].values[0],token_to_spend_address,
                                          token_to_buy_address,config.sender_address,
                                         amount_token_to_spend,gas_price_final_gwei , token_to_spend_decimals)
             waitForTxResponse(tx)
-            amount_token_to_buy_after_tx = contract_token_to_buy.functions.balanceOf(config.sender_address).call()
+
+            check_balance = False
+            while check_balance == False:
+                amount_token_to_buy_after_tx = web3.eth.get_balance(config.sender_address)
+                if (amount_token_to_buy_after_tx - amount_token_to_buy_before_tx) != 0:
+                    amount_token_to_buy_after_tx = web3.eth.get_balance(config.sender_address)
+                    print(f"Timestamp {datetime.datetime.now()} - Balance updated")
+                    check_balance = True
+
             amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
+
             if stop_loss_set == True or take_profit_set == True:
                 if tx_status == "sent":
                     token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
@@ -800,7 +1090,7 @@ def sendTx():
                         tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
                                      , config.sender_address)
                         waitForTxResponse(tx)
-                    activateStopLossAndTakeProfit(amount_token_to_buy_received)
+                    activateStopLossAndTakeProfit()
                 else:
                     print("Stop loss / Take profit not activated because transaction is not sent")
                     ending()
@@ -852,12 +1142,17 @@ def main():
     gasPriceChoice()
     choiceSwapMethod()
     setTokenToSpendParameters()
+    choiceScanLiquidityAdded()
+    choiceStopPrice()
     choiceAmountToSpend()
     setStopLoss()
     setTakeProfit()
     setTokenToBuyParameters()
+    setStopPrice()
     checkExistingPairs()
+    scanLiquidity()
     getTokenPrices()
+    stopPrice()
     tradePreview()
     sendTx()
     ending()
