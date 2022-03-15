@@ -170,7 +170,7 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             'from': config.sender_address,
             'value': amount_to_spend,
             # This is the token BNB amount you want to swap from
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -184,7 +184,7 @@ def swapExactNativeForTokens(dex,token_spend,token_buy,sender_address,amount_to_
             'from': config.sender_address,
             'value': amount_to_spend,
             # This is the token BNB amount you want to swap from
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -204,7 +204,7 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_spe
             (int(time.time()) + 10000)
         ).buildTransaction({
             'from': config.sender_address,
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -218,7 +218,7 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_spe
             (int(time.time()) + 10000)
         ).buildTransaction({
             'from': config.sender_address,
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -232,7 +232,7 @@ def swapExactTokensForNative(dex,token_spend,token_buy,sender_address,amount_spe
             (int(time.time()) + 10000)
         ).buildTransaction({
             'from': config.sender_address,
-            'gas': 1000000,
+            #'gas': 1000000,
             'gasPrice': web3.toWei(gas_price, 'gwei'),
             'nonce': nonce
         })
@@ -250,11 +250,10 @@ def swapExactTokensForTokens(amount_spend,spend_address,buy_address,sender,gas_p
         (int(time.time()) + 10000)
     ).buildTransaction({
         'from': sender,
-        'gas': 1000000,
-        'gasPrice': web3.toWei(gas_price, 'gwei'),
-
+        #'gas': 1000000,
+        'gasPrice': web3.toWei(gas_price,"gwei"),
         #'maxFeePerGas': web3.toWei(gas_price, 'gwei'),
-        #'maxPriorityFeePerGas': web3.toWei(gas_price, 'gwei'),
+        #'maxPriorityFeePerGas': ,
         'nonce': nonce
     })
     return tx
@@ -521,65 +520,83 @@ def choiceAmountToSpend():
         print("Please choose between the option proposed.")
         choiceAmountToSpend()
 
-def setStopLoss():
+def choiceStopType():
     global stop_loss_set
-
-    print("Do you want to set a stop loss ? Type 'yes' or 'no'")
-    stop_loss_choice = input("Type your answer here : ")
-    if stop_loss_choice == "yes":
-        stop_loss_set = True
-
-        def selectStopLoss():
-            global stop_loss_percentage
-            print("At which % of your entry price do you want to set your stop loss?")
-            print("(e.g : if you want to set your stop loss at -50% of your entry price, type 50)")
-            stop_loss_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
-            if 0 <= float(stop_loss_percentage_base_100) <= 99.9:
-                stop_loss_percentage = float(stop_loss_percentage_base_100) / float(100)
-                print("Stop loss gonna be set at",stop_loss_percentage_base_100,"% of your entry price.")
-            else:
-                print("Percentage entered should be between 0 and 99.9. Retry")
-                selectStopLoss()
-
-        selectStopLoss()
-
-    elif stop_loss_choice == "no":
-        stop_loss_set = False
-        print("No stop loss gonna be set.")
-
-    else:
-        print("Answer should be 'yes' or 'no'")
-        setStopLoss()
-
-def setTakeProfit():
     global take_profit_set
+    global trailing_stop_set
 
-    print("Do you want to set a take profit ? Type 'yes' or 'no'")
-    take_profit_choice = input("Type your answer here : ")
-    if take_profit_choice == "yes":
-        take_profit_set = True
+    print("Select between the following choices on the stop order type that you want to set : ")
+    print(" - 1 = Stop loss only ")
+    print(" - 2 = Take profit only ")
+    print(" - 3 = Stop loss + Take profit ")
+    print(" - 4 = Trailing stop ")
+    print(" - 5 = No stop order")
+    stop_type = input("Type your choice here : ")
 
-        def selectTakeProfit():
-            global take_profit_percentage
-            print("At which % of the entry price do you want to set your take profit")
-            print("(e.g : if you want to set your take profit at +50% of your entry price, type 50)")
-            take_profit_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
-            if 0 < float(take_profit_percentage_base_100):
-                take_profit_percentage = float(take_profit_percentage_base_100) / 100
-                print("Take profit gonna be set at", take_profit_percentage_base_100, "% from your entry price.")
-            else:
-                print("Percentage entered should be superior to 0. Retry")
-                selectTakeProfit()
-
-        selectTakeProfit()
-
-    elif take_profit_choice == "no":
+    if stop_type == "1":
+        stop_loss_set = True
         take_profit_set = False
-        print("No take profit gonna be set.")
-
+        trailing_stop_set = False
+    elif stop_type == "2":
+        stop_loss_set = False
+        take_profit_set = True
+        trailing_stop_set = False
+    elif stop_type == "3":
+        stop_loss_set = True
+        take_profit_set = True
+        trailing_stop_set = False
+    elif stop_type == "4":
+        stop_loss_set = False
+        take_profit_set = False
+        trailing_stop_set = True
+    elif stop_type == "5":
+        stop_loss_set = False
+        take_profit_set = False
+        trailing_stop_set = False
     else:
-        print("Answer should be 'yes' or 'no'")
-        setTakeProfit()
+        print("Please select an option between the ones displayed.")
+        choiceStopType()
+
+def selectTrailingStop():
+     global trailing_stop_percentage
+     if trailing_stop_set == True:
+        print("At which % of your entry price do you want to set your trailing stop?")
+        print("(e.g : if you want to set your stop at -5% of your entry price, type 5)"
+              "(note that trailing stop will evolve in case price goes up")
+        trailing_stop_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
+        if 0 <= float(trailing_stop_percentage_base_100) <= 99.9:
+            trailing_stop_percentage = float(trailing_stop_percentage_base_100) / float(100)
+            print("Stop loss gonna be set at",trailing_stop_percentage_base_100,"% of your entry price.")
+        else:
+            print("Percentage entered should be between 0 and 99.9. Retry")
+            selectTrailingStop()
+
+def selectStopLoss():
+    global stop_loss_percentage
+    if stop_loss_set == True:
+        print("At which % of your entry price do you want to set your stop loss?")
+        print("(e.g : if you want to set your stop loss at -50% of your entry price, type 50)")
+        stop_loss_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
+        if 0 <= float(stop_loss_percentage_base_100) <= 99.9:
+            stop_loss_percentage = float(stop_loss_percentage_base_100) / float(100)
+            print("Stop loss gonna be set at",stop_loss_percentage_base_100,"% of your entry price.")
+        else:
+            print("Percentage entered should be between 0 and 99.9. Retry")
+            selectStopLoss()
+
+def selectTakeProfit():
+    global take_profit_percentage
+    if take_profit_set == True:
+        print("At which % of the entry price do you want to set your take profit")
+        print("(e.g : if you want to set your take profit at +50% of your entry price, type 50)")
+        take_profit_percentage_base_100 = input("Type your answer here (must be between 0 and 99.9 ) : ")
+        if 0 < float(take_profit_percentage_base_100):
+            take_profit_percentage = float(take_profit_percentage_base_100) / 100
+            print("Take profit gonna be set at", take_profit_percentage_base_100, "% from your entry price.")
+        else:
+            print("Percentage entered should be superior to 0. Retry")
+            selectTakeProfit()
+
 
 # 6) set parameters for token to buy
 def setTokenToBuyParameters():
@@ -609,7 +626,6 @@ def setTokenToBuyParameters():
         token_to_buy_balance = native_token_balance
         token_to_buy_symbol = native_token_symbol
         token_to_buy_balance_readable =native_token_balance_readable
-
 
 
 def setStopPrice():
@@ -880,6 +896,7 @@ def stopPrice():
 def tradePreview():
     global stop_loss_value
     global take_profit_value
+    global trailing_stop_value
 
     print(f"FIAT price of {token_to_spend_symbol}  : {token_to_spend_price_fiat}")
     print(f"FIAT price of {token_to_buy_symbol} : {token_to_buy_price_fiat}")
@@ -888,9 +905,13 @@ def tradePreview():
           token_to_spend_symbol)
     print("Your fiat entry  price on",token_to_buy_symbol,"is :",token_to_buy_price_fiat)
 
-    if stop_loss_set == True:
+    if stop_loss_set == True :
         stop_loss_value = float(token_to_buy_price_fiat) * (1 - float(stop_loss_percentage))
         print("Stop loss is set at : ", stop_loss_value)
+    if trailing_stop_set == True :
+        trailing_stop_value =\
+            {"value": float(token_to_buy_price_fiat) * (1 - float(trailing_stop_percentage))}
+        print("Trailing stop is set at : ", trailing_stop_value["value"])
     if take_profit_set == True:
         take_profit_value = float(token_to_buy_price_fiat) * (1 + float(take_profit_percentage))
         print("Take profit is set at : ", take_profit_value)
@@ -933,17 +954,18 @@ def sendTxReturn():
     waitForTxResponse(tx)
 
 
-def activateStopLossAndTakeProfit():
+def activateStop():
     condition = False
     token_to_buy_price_fiat_last = 0
     while condition == False:
         getTokenPrices()
-        if stop_loss_set == True and take_profit_set == True:
+        if stop_loss_set == True and take_profit_set == True and trailing_stop_set == False:
             delta_stop_loss = (1 - (stop_loss_value / token_to_buy_price_fiat)) * 100
             delta_take_profit = ((take_profit_value / token_to_buy_price_fiat) - 1) * 100
 
             delta_stop_loss_formatted = f"{delta_stop_loss:.2f}"
             delta_take_profit_formatted = f"{delta_take_profit:.2f}"
+
 
             if token_to_buy_price_fiat_last != token_to_buy_price_fiat:
                 print(
@@ -961,7 +983,7 @@ def activateStopLossAndTakeProfit():
                 sendTxReturn()
                 ending()
 
-        elif stop_loss_set == True and take_profit_set == False:
+        elif stop_loss_set == True and take_profit_set == False and trailing_stop_set == False:
             delta_stop_loss = (1 - (stop_loss_value / token_to_buy_price_fiat)) * 100
 
             delta_stop_loss_formatted = f"{delta_stop_loss:.2f}"
@@ -977,7 +999,7 @@ def activateStopLossAndTakeProfit():
                 sendTxReturn()
                 ending()
 
-        elif stop_loss_set == False and take_profit_set == True:
+        elif stop_loss_set == False and take_profit_set == True and trailing_stop_set == False:
             delta_take_profit = ((take_profit_value / token_to_buy_price_fiat) - 1) * 100
             delta_take_profit_formatted = f"{delta_take_profit:.2f}"
 
@@ -991,6 +1013,27 @@ def activateStopLossAndTakeProfit():
                 print("Take profit activated.")
                 sendTxReturn()
                 ending()
+        elif stop_loss_set == False and take_profit_set == False and trailing_stop_set == True:
+
+            delta_stop_loss = (1 - (trailing_stop_value["value"] / token_to_buy_price_fiat)) * 100
+            delta_stop_loss_formatted = f"{delta_stop_loss:.2f}"
+
+            if delta_stop_loss > (trailing_stop_percentage * 100):
+                new_trailing_stop_value = {"value": float(token_to_buy_price_fiat) * (1 - float(trailing_stop_percentage))}
+                trailing_stop_value.update(new_trailing_stop_value)
+
+            if token_to_buy_price_fiat_last != token_to_buy_price_fiat:
+                print(
+                    f"Timestamp {datetime.datetime.now()} - "
+                    f" FIAT price of {token_to_buy_symbol} is {token_to_buy_price_fiat} $ - "
+                    f" {delta_stop_loss_formatted}% from current price to stop loss - " 
+                    f" Trailing stop is set at {trailing_stop_value['value']} $"
+                )
+            if token_to_buy_price_fiat <= trailing_stop_value['value']:
+                print("Stop loss activated.")
+                sendTxReturn()
+                ending()
+
         token_to_buy_price_fiat_last = token_to_buy_price_fiat
 
 #8) Send transaction
@@ -1018,14 +1061,14 @@ def sendTx():
 
         amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
         if tx_status == "sent":
-            if stop_loss_set == True or take_profit_set == True:
+            if stop_loss_set == True or take_profit_set == True or trailing_stop_set == True:
                 token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
                                                         , config.sender_address)
                 if token_to_buy_approval == False:
                     tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
                                  , config.sender_address)
                     waitForTxResponse(tx)
-                activateStopLossAndTakeProfit()
+                activateStop()
         else:
             print("Stop loss / Take profit not activated because transaction is not sent")
             ending()
@@ -1046,7 +1089,7 @@ def sendTx():
                     check_balance = True
 
             amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
-            if stop_loss_set == True or take_profit_set == True:
+            if stop_loss_set == True or take_profit_set == True or trailing_stop_set == True:
                 if tx_status == "sent":
                     token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
                                                           , config.sender_address)
@@ -1054,7 +1097,7 @@ def sendTx():
                         tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
                                      , config.sender_address)
                         waitForTxResponse(tx)
-                    activateStopLossAndTakeProfit()
+                    activateStop()
                 else:
                     print("Stop loss / Take profit not activated because transaction is not sent")
                     ending()
@@ -1082,7 +1125,7 @@ def sendTx():
 
             amount_token_to_buy_received = amount_token_to_buy_after_tx - amount_token_to_buy_before_tx
 
-            if stop_loss_set == True or take_profit_set == True:
+            if stop_loss_set == True or take_profit_set == True or trailing_stop_set == True:
                 if tx_status == "sent":
                     token_to_buy_approval = checkApproval(contract_token_to_buy, token_to_buy_symbol, router_address
                                                           , config.sender_address)
@@ -1090,7 +1133,7 @@ def sendTx():
                         tx = approve(contract_token_to_buy, token_to_buy_symbol, router_address
                                      , config.sender_address)
                         waitForTxResponse(tx)
-                    activateStopLossAndTakeProfit()
+                    activateStop()
                 else:
                     print("Stop loss / Take profit not activated because transaction is not sent")
                     ending()
@@ -1145,8 +1188,10 @@ def main():
     choiceScanLiquidityAdded()
     choiceStopPrice()
     choiceAmountToSpend()
-    setStopLoss()
-    setTakeProfit()
+    choiceStopType()
+    selectStopLoss()
+    selectTakeProfit()
+    selectTrailingStop()
     setTokenToBuyParameters()
     setStopPrice()
     checkExistingPairs()
